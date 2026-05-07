@@ -102,6 +102,9 @@ export async function getAdsData(startDate: string, endDate: string): Promise<Ad
     const accounts: AdsData['accounts'] = []
     const campaigns: AdsData['campaigns'] = []
 
+    const accountErrors: string[] = []
+    let accountsSucceeded = 0
+
     await Promise.all(NORIEGA_AD_ACCOUNTS.map(async (account) => {
       try {
         // Account-level totals
@@ -133,6 +136,7 @@ export async function getAdsData(startDate: string, endDate: string): Promise<Ad
           totalPurchaseValue    += purchaseAction ? parseFloat(purchaseAction.value ?? '0') : 0
 
           accounts.push({ name: account.name, spend: Math.round(spend * 100) / 100, impressions, clicks })
+          accountsSucceeded++
         }
 
         // Campaign-level breakdown
@@ -152,9 +156,21 @@ export async function getAdsData(startDate: string, endDate: string): Promise<Ad
           })
         }
       } catch (acctErr) {
-        console.warn(`[metaAds] Ad account ${account.name} error:`, acctErr)
+        const msg = String(acctErr).slice(0, 200)
+        console.warn(`[metaAds] Ad account ${account.name} error:`, msg)
+        accountErrors.push(`${account.name}: ${msg}`)
       }
     }))
+
+    // If no account returned data, return unavailable with error details
+    if (accountsSucceeded === 0) {
+      console.error('[metaAds] All ad accounts failed:', accountErrors)
+      return {
+        ...empty,
+        available: false,
+        error: accountErrors[0] ?? 'All ad accounts unreachable',
+      } as any
+    }
 
     const ctr  = totalImpressions > 0 ? Math.round((totalClicks / totalImpressions) * 10000) / 100 : 0
     const cpc  = totalClicks > 0     ? Math.round((totalSpend / totalClicks) * 100) / 100 : 0

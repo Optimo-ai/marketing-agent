@@ -149,7 +149,7 @@ META ADS (DATOS REALES):
 - ROAS: ${adsData.roas}x
 - Cuentas con gasto: ${adsData.accounts.map(a => `${a.name}: $${a.spend}`).join(', ')}
 - Top campañas: ${adsData.campaigns.slice(0, 5).map(c => `"${c.name}" ($${c.spend}, ${c.impressions} impr.)`).join(' | ')}`
-      : 'META ADS: Token configurado pero sin datos de gasto este período (cuentas posiblemente sin campañas activas).'
+      : `META ADS: No se pudieron obtener datos — ${(adsData as any).error ?? 'token expirado o sin permisos'}. NO reportar $0 como inversión real — los datos no están disponibles.`
 
     const igSection = socialData.instagram.available
       ? `

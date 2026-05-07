@@ -3291,19 +3291,19 @@ export default function Home() {
                       <div className="status-row">
                         <span><span className={intStatus.anthropic ? 'dot-connected' : 'dot-error'}/>Anthropic API</span>
                         <span style={{fontSize:11,fontFamily:'var(--mono)',color:intStatus.anthropic ? 'var(--teal)' : 'var(--red)'}}>
-                          {intStatus.anthropic ? 'Conectado' : `Error: ${intStatus.errors?.anthropic?.slice(0,40)}`}
+                          {intStatus.anthropic ? 'Conectado' : `Error: ${intStatus.errors?.anthropic?.slice(0,80)}`}
                         </span>
                       </div>
                       <div className="status-row">
                         <span><span className={intStatus.monday ? 'dot-connected' : 'dot-error'}/>Monday.com</span>
                         <span style={{fontSize:11,fontFamily:'var(--mono)',color:intStatus.monday ? 'var(--teal)' : 'var(--red)'}}>
-                          {intStatus.monday ? 'Conectado' : `Error: ${intStatus.errors?.monday?.slice(0,40)}`}
+                          {intStatus.monday ? 'Conectado' : `Error: ${intStatus.errors?.monday?.slice(0,80)}`}
                         </span>
                       </div>
                       <div className="status-row">
                         <span><span className={intStatus.ghl ? 'dot-connected' : 'dot-error'}/>GHL (GoHighLevel)</span>
                         <span style={{fontSize:11,fontFamily:'var(--mono)',color:intStatus.ghl ? 'var(--teal)' : 'var(--red)'}}>
-                          {intStatus.ghl ? 'Conectado' : `Error: ${intStatus.errors?.ghl?.slice(0,40)}`}
+                          {intStatus.ghl ? 'Conectado' : `Error: ${intStatus.errors?.ghl?.slice(0,80)}`}
                         </span>
                       </div>
                       <div className="divider"/>

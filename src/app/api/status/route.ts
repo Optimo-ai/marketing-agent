@@ -11,25 +11,43 @@ export async function GET() {
   }
 
   // Check Anthropic
-  try {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk')
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 10,
-      messages: [{ role: 'user', content: 'hi' }],
-    })
-    status.anthropic = true
-  } catch (e: unknown) {
-    status.errors.anthropic = String(e)
+  if (!process.env.ANTHROPIC_API_KEY) {
+    status.errors.anthropic = 'ANTHROPIC_API_KEY not set in environment variables'
+  } else {
+    try {
+      const { default: Anthropic } = await import('@anthropic-ai/sdk')
+      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+      await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 10,
+        messages: [{ role: 'user', content: 'hi' }],
+      })
+      status.anthropic = true
+    } catch (e: unknown) {
+      const msg = String(e)
+      if (msg.includes('401') || msg.includes('authentication')) {
+        status.errors.anthropic = '401 — API key invalid or revoked. Generate a new one at console.anthropic.com'
+      } else {
+        status.errors.anthropic = msg.slice(0, 120)
+      }
+    }
   }
 
   // Check Monday.com
-  try {
-    await getMarketingBoards()
-    status.monday = true
-  } catch (e: unknown) {
-    status.errors.monday = String(e)
+  if (!process.env.MONDAY_API_KEY) {
+    status.errors.monday = 'MONDAY_API_KEY not set in environment variables'
+  } else {
+    try {
+      await getMarketingBoards()
+      status.monday = true
+    } catch (e: unknown) {
+      const msg = String(e)
+      if (msg.includes('unauthorized') || msg.includes('not authenticated') || msg.includes('Unauthorized')) {
+        status.errors.monday = 'Token revoked or invalid. Regenerate at Monday → Profile → Administration → API'
+      } else {
+        status.errors.monday = msg.slice(0, 120)
+      }
+    }
   }
 
   // Check GHL

@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
       if (!copyData || copyData.length === 0) {
         return NextResponse.json({ error: 'Faltan los datos del copy.' }, { status: 400 })
       }
-      const prompt = `Genera los horarios óptimos de publicación para la audiencia en RD/LATAM en ${month} ${year}.\n${JSON.stringify(copyData, null, 2)}`
+      const today = new Date().toISOString().slice(0, 10)
+      const prompt = `Today's date: ${today}. Month to schedule: ${month} ${year}.\nDo NOT assign any scheduledDate before ${today}. Posts for past dates must be scheduled starting from today onward.\n\n${JSON.stringify(copyData, null, 2)}`
       const raw = await runSkill('schedule', prompt, false)
       const generatedSchedule = parseJSON(raw)
       return NextResponse.json({ schedule: generatedSchedule })

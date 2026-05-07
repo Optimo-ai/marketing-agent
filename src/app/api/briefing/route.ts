@@ -8,19 +8,32 @@ export async function POST(req: NextRequest) {
 
     // action: 'generate' | 'approve' | 'load'
     if (action === 'load') {
-      // Load existing approved briefing from Monday
-      const doc = await findDoc(`Briefing Mensual — ${month} ${year}`)
-      if (!doc) return NextResponse.json({ error: 'No briefing found' }, { status: 404 })
-      const content = await getDocContent(doc.id)
-      return NextResponse.json({ briefing: content, docUrl: doc.url })
+      // Intentar cargar briefing guardado en Monday — si no existe o Monday falla, devolver null
+      try {
+        const doc = await findDoc(`Briefing Mensual — ${month} ${year}`)
+        if (!doc) return NextResponse.json({ briefing: null })
+        const content = await getDocContent(doc.id)
+        return NextResponse.json({ briefing: content, docUrl: doc.url })
+      } catch {
+        // Monday no disponible — devolver null para que el frontend continúe sin error
+        return NextResponse.json({ briefing: null })
+      }
     }
 
     if (action === 'approve') {
-      // Save approved briefing to Monday.com as a Doc
-      const title = `Briefing Mensual — ${month} ${year}`
-      const content = `STATUS: APROBADO\nFECHA: ${new Date().toISOString().split('T')[0]}\n\n${JSON.stringify(briefing, null, 2)}`
-      const doc = await createDoc(title, content)
-      return NextResponse.json({ success: true, docUrl: doc.url, docId: doc.id })
+      // Intentar guardar en Monday — si falla, devolver éxito igual (datos viven en frontend)
+      let docUrl = ''
+      let docId = ''
+      try {
+        const title = `Briefing Mensual — ${month} ${year}`
+        const content = `STATUS: APROBADO\nFECHA: ${new Date().toISOString().split('T')[0]}\n\n${JSON.stringify(briefing, null, 2)}`
+        const doc = await createDoc(title, content)
+        docUrl = doc.url ?? ''
+        docId = doc.id ?? ''
+      } catch (err) {
+        console.warn('[briefing] No se pudo guardar en Monday (continuando sin él):', String(err).slice(0, 100))
+      }
+      return NextResponse.json({ success: true, docUrl, docId })
     }
 
     // action === 'generate'

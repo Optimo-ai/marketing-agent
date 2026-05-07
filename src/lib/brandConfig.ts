@@ -1,6 +1,6 @@
 // src/lib/brandConfig.ts
-// Configuración visual de marca — extraída de brandbooks oficiales Noriega Group
-// Versión: 1.0 | Marcas: Noriega Group · Arko · Aria · Kasa Living
+// Configuración visual de marca — extraída de blueprints oficiales Noriega Group
+// Actualizado con datos reales de los Business Blueprints de cada proyecto
 
 export type BrandKey = 'noriega_group' | 'arko' | 'aria' | 'kasa'
 
@@ -45,6 +45,8 @@ export interface BrandConfig {
 }
 
 // ─── NORIEGA GROUP ────────────────────────────────────────────────────────────
+// Desarrolladora verticalmente integrada · 35 años · Venezuela + República Dominicana
+// Filosofía: ubicación primero, producto después · Tagline: WE BUILD FUTURE
 const noriegaGroup: BrandConfig = {
   displayName: 'Noriega Group',
   tagline: 'WE BUILD FUTURE',
@@ -64,90 +66,112 @@ const noriegaGroup: BrandConfig = {
     accent: 'Mistral',
   },
   imageStyle: {
-    overlayColor: '#211e1f', overlayOpacity: 0.60, overlayDirection: 'bottom',
+    overlayColor: '#211e1f', overlayOpacity: 0.65, overlayDirection: 'bottom',
     titleColor: '#ffffff',   titleSize: 0.065, titleWeight: '300', titleTransform: 'uppercase',
     bodyColor: '#b8b4b8',    bodySize: 0.028,
     accentBar: '#952a95',    accentBarWidth: 0.08,
     logoPosition: 'top-left', logoSize: 0.055,
   },
-  aiPromptBase: 'luxury real estate Dominican Republic, architectural photography, dark dramatic lighting, premium corporate aesthetic, purple and black tones, modern minimalist composition, cinematic quality',
+  // 35 años de trayectoria, integración vertical completa (terreno→desarrollo→construcción→venta)
+  aiPromptBase: 'vertically integrated luxury real estate developer Dominican Republic with 35 years of experience, premium corporate architectural photography, cinematic dark dramatic lighting, deep plum purple #441e44 and near-black #211e1f color palette with teal #64fbea accents, sophisticated modern minimalist architectural composition, Punta Cana development skyline, authoritative and trustworthy corporate brand presence, strategic location development, high-end investment real estate',
   formats: {
-    post:      { w: 1080, h: 1080 },
+    post:      { w: 1080, h: 1350 },
     story:     { w: 1080, h: 1920 },
     landscape: { w: 1200, h: 628  },
     portrait:  { w: 1080, h: 1350 },
   },
 }
 
-// ─── ARKO ─────────────────────────────────────────────────────────────────────
+// ─── ARKO GOLF & RESIDENCES ───────────────────────────────────────────────────
+// Vista Cana · 154 unidades (128 aptos + 26 rooftops) · 24 swim-up apartments
+// Arquitectura mediterránea blanca · Arcos como elemento central
+// Colores reales: NAVY #1B2E3D | GOLD #B8973A | CREAM #F7F3EE
+// Slogan: "La armonía de vivir en el Caribe" / "Armonía & Pureza en cada detalle"
 const arko: BrandConfig = {
   displayName: 'Arko Golf & Residences',
-  tagline: 'Vibrant Lifestyle',
+  tagline: 'La armonía de vivir en el Caribe',
   logo: 'arko_logo.png',
   colors: {
-    primary:    '#000000',
-    secondary:  '#60a909',
-    accent:     '#b51a7d',
-    electric:   '#0028b9',
-    neonPurple: '#5d00b8',
-    lightBg:    '#dfdfe1',
+    navy:      '#1B2E3D',
+    gold:      '#B8973A',
+    cream:     '#F7F3EE',
+    white:     '#FFFFFF',
+    deepGreen: '#2D4A3E',
+    dustyRose: '#C4A49A',
+    warmBeige: '#E8DDD0',
   },
   typography: {
     display: 'Cítrica',  displayWeight: 400,
     body: 'Myriad Pro',  bodyWeight: 300,
   },
   imageStyle: {
-    overlayColor: '#000000', overlayOpacity: 0.65, overlayDirection: 'bottom',
-    titleColor: '#ffffff',   titleSize: 0.070, titleWeight: '400', titleTransform: 'uppercase',
-    bodyColor: '#dfdfe1',    bodySize: 0.030,
-    accentBar: '#b51a7d',    accentBarWidth: 0.10,
-    logoPosition: 'top-left', logoSize: 0.052,
-    neonGlow: '#5d00b8',     neonGlowOpacity: 0.15,
+    overlayColor: '#1B2E3D', overlayOpacity: 0.55, overlayDirection: 'bottom',
+    titleColor: '#F7F3EE',   titleSize: 0.065, titleWeight: '300', titleTransform: 'none',
+    bodyColor: '#B8973A',    bodySize: 0.028,
+    accentBar: '#B8973A',    accentBarWidth: 0.09,
+    logoPosition: 'top-left', logoSize: 0.055,
   },
-  aiPromptBase: 'luxury golf residence Caribbean nighttime architecture, neon accent lighting purple pink electric blue, BOHO chic tropical aesthetic, pool rooftop jacuzzi Vista Cana Dominican Republic, dramatic dark background, cinematic architectural photography',
+  // Arquitectura mediterránea blanca · Arcos arquitectónicos · Campo de golf iluminado
+  // 3 bloques en chevron · Biofílico · Tranquilidad · Vista Cana (comunidad planificada)
+  // Interior: verdes profundos, beige cálido, rosa polvoriento, terrazzo, madera clara
+  aiPromptBase: 'Mediterranean white contemporary residential architecture Vista Cana Dominican Republic, pure white stepped arched facades with black metal window frames, illuminated golf course fairway views at golden hour and twilight, lush tropical native landscaping with deep green palms, biophilic design with warm beige and dusty rose and terrazzo textures, light wood floors and cream linen textiles, turquoise blue swim-up pool reflecting white arches, 3 building blocks in chevron V-formation, peaceful serene Caribbean lifestyle community atmosphere, soft warm natural light, architectural arches framing nature as living paintings, navy and gold accents, luxury calm tranquil residential resort',
   formats: {
-    post:      { w: 1080, h: 1080 },
+    post:      { w: 1080, h: 1350 },
     story:     { w: 1080, h: 1920 },
     landscape: { w: 1200, h: 628  },
     small:     { w: 470,  h: 246  },
   },
 }
 
-// ─── ARIA ─────────────────────────────────────────────────────────────────────
+// ─── ARIA SUITES & RESIDENCES ─────────────────────────────────────────────────
+// Downtown Punta Cana · ÚNICO proyecto mixto (residencial + comercial)
+// 174 apartamentos + 50 locales + 63 kioscos · 4 sub-marcas
+// Colores reales: NAVY #1B2E3D | GOLD #B8973A | CREAM #F7F3EE
+// Interior: blanco marfil · verde jade suave · gris cálido · madera clara
+// Slogan: "Un Oasis... de Exclusividad" / "We are in MOTION"
 const aria: BrandConfig = {
   displayName: 'Aria Suites & Residences',
-  tagline: 'Simple Living',
+  tagline: 'Un Oasis de Exclusividad',
   logo: 'aria_logo.png',
   colors: {
-    primary:     '#369d9a',
-    secondary:   '#a0cac7',
-    dark:        '#000000',
-    artPavilion: '#06376b',
-    tealDeep:    '#16788d',
-    magenta:     '#c13271',
+    navy:      '#1B2E3D',
+    gold:      '#B8973A',
+    cream:     '#F7F3EE',
+    ivory:     '#FAFAF7',
+    jade:      '#4A8C6B',
+    warmGrey:  '#8C8C8A',
+    lightWood: '#C8A97E',
   },
   typography: {
     display: 'Black Diamond', displayWeight: 400,
     body: 'Abhaya Libre',     bodyWeight: 400,
   },
   imageStyle: {
-    overlayColor: '#369d9a', overlayOpacity: 0.40, overlayDirection: 'bottom',
-    titleColor: '#ffffff',   titleSize: 0.058, titleWeight: '400', titleTransform: 'none',
-    bodyColor: '#ffffff',    bodySize: 0.026,
-    accentBar: '#369d9a',    accentBarWidth: 0.06,
-    logoPosition: 'top-left', logoSize: 0.060,
-    watercolorOverlay: true, watercolorOpacity: 0.12,
+    overlayColor: '#1B2E3D', overlayOpacity: 0.50, overlayDirection: 'bottom',
+    titleColor: '#F7F3EE',   titleSize: 0.060, titleWeight: '300', titleTransform: 'none',
+    bodyColor: '#B8973A',    bodySize: 0.026,
+    accentBar: '#B8973A',    accentBarWidth: 0.08,
+    logoPosition: 'top-left', logoSize: 0.058,
   },
-  aiPromptBase: 'Caribbean resort lifestyle photography, turquoise water tones, artistic watercolor aesthetic, simple modern tropical living Punta Cana, soft natural light, relaxed sophisticated atmosphere, bold free spirited contrasts',
+  // Único mixto de Downtown PC · Art Pavilion + City Center + City Walk + Residencias
+  // IKEA a 500m · 15 min del aeropuerto · Smart home · Cocina italiana
+  // Rooftop: gym interior/exterior, jacuzzis, solarium, pista running, lounge
+  // Estructura en fideicomiso · 9,973m² terreno · 26,047m² construcción
+  aiPromptBase: 'unique mixed-use luxury urban development Downtown Punta Cana Dominican Republic, navy #1B2E3D and gold #B8973A and cream #F7F3EE color palette, ivory white and soft jade green and warm grey and light wood interiors, Italian modular kitchen with brushed stainless steel appliances, smart home technology with automated blinds and lighting, dramatic central atrium with natural light flooding multiple floors, art pavilion cultural spaces with gallery aesthetics, rooftop with infinity-edge jacuzzis and solarium and running track, modern urban oasis design, sophisticated lifestyle with Caribbean warmth, mixed commercial and residential architecture, pedestrian promenade with kiosks and gardens, "Un Oasis de Exclusividad"',
   formats: {
-    post:      { w: 1080, h: 1080 },
+    post:      { w: 1080, h: 1350 },
     story:     { w: 1080, h: 1920 },
     landscape: { w: 1200, h: 628  },
     portrait:  { w: 1080, h: 1350 },
   },
 }
 
-// ─── KASA LIVING ──────────────────────────────────────────────────────────────
+// ─── KASA LIVING (+ KASA PUNTA CANA RESIDENCES) ──────────────────────────────
+// Downtown Punta Cana · 109 aptos · Inversión + renta turística + gestión hotelera
+// Kasa Residences (entregado) + Kasa Living (en construcción, Q1 2025)
+// CONFOTUR · Cocina italiana modular · Smart home · Todo incluido desde día 1
+// 24 terrazas privadas con jacuzzi y BBQ · Acceso peatonal a Aria (80+ locales)
+// Ecosistema: Dolphin Discovery, Coco Bongo, Hard Rock, Mall, IKEA, Hilton GI
 const kasa: BrandConfig = {
   displayName: 'Kasa Living',
   tagline: 'Lifestyle',
@@ -168,16 +192,20 @@ const kasa: BrandConfig = {
   imageStyle: {
     overlayType: 'color-block',
     overlayColors: ['#dd9560', '#a34b75', '#68438a', '#969a55'],
-    overlayColor: '#a34b75', overlayOpacity: 0.55, overlayDirection: 'bottom',
+    overlayColor: '#1a1a1a', overlayOpacity: 0.55, overlayDirection: 'bottom',
     titleColor: '#ffffff',   titleSize: 0.072, titleWeight: '400', titleTransform: 'uppercase',
     bodyColor: '#ffffff',    bodySize: 0.030,
     accentBar: '#a34b75',    accentBarWidth: 0.09,
     logoPosition: 'top-left', logoSize: 0.058,
     editorialStyle: true,
   },
-  aiPromptBase: 'vibrant urban tropical lifestyle photography Punta Cana, fashion editorial aesthetic, color-block composition, orange pink purple olive palette, young sophisticated Caribbean real estate, dynamic energetic atmosphere, luxury modern apartment amenities pool',
+  // Inversión activa · Renta vacacional · Gestión hotelera integrada · CONFOTUR
+  // Pisos porcelanato importado español · Cocina italiana modular · Smart home
+  // Walkable: Dolphin Discovery, Coco Bongo, Hard Rock, IKEA, Hilton Garden Inn
+  // 24 terrazas privadas con jacuzzi y BBQ · Acceso a Aria (80+ comercios)
+  aiPromptBase: 'vibrant urban tropical investment apartment photography Downtown Punta Cana Dominican Republic, walkable city lifestyle steps from Dolphin Discovery Coco Bongo Hard Rock Café IKEA Hilton Garden Inn, luxury turnkey apartments with imported Spanish porcelain floors Italian modular kitchen smart home automation smart blinds and locks, rooftop private terrace with jacuzzi and BBQ overlooking urban Punta Cana, orange #dd9560 and pink #a34b75 and purple #68438a and olive #969a55 color-block editorial palette, fashion-forward urban real estate photography, active energetic ambitious Caribbean urban atmosphere, young sophisticated investors and professionals, CONFOTUR tax benefit investment property',
   formats: {
-    post:      { w: 1080, h: 1080 },
+    post:      { w: 1080, h: 1350 },
     story:     { w: 1080, h: 1920 },
     landscape: { w: 1200, h: 628  },
     portrait:  { w: 1080, h: 1350 },
@@ -195,7 +223,7 @@ export const BRAND_CONFIGS: Record<BrandKey, BrandConfig> = {
 
 /**
  * Detecta la marca a partir del nombre del post y el campo project
- * que ya genera el calendario de la Fase 2.
+ * que genera el calendario de la Fase 2.
  */
 export function detectBrand(postName: string, project?: string): BrandKey {
   const text = `${postName} ${project ?? ''}`.toLowerCase()
@@ -206,8 +234,8 @@ export function detectBrand(postName: string, project?: string): BrandKey {
 }
 
 /**
- * Construye el prompt completo para fal.ai combinando:
- * - prompt base de la marca (estilo visual, paleta, atmósfera)
+ * Construye el prompt base para Higgsfield combinando:
+ * - prompt base de la marca (estilo visual, paleta, atmósfera — extraído del blueprint)
  * - contentDirection del post (qué debe mostrar esta imagen específica)
  * - composición correcta según el formato (cuadrado, vertical, horizontal)
  */
@@ -229,7 +257,6 @@ export function buildImagePrompt(
     config.aiPromptBase,
     contentDirection,
     composition,
-    'photorealistic, ultra-high quality, 4K, professional photography',
     'no text overlays, no watermarks, no logos, no UI elements',
   ].filter(Boolean).join(', ')
 }

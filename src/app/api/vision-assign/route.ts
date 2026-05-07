@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
 
     const { images, posts } = body
 
-    if (!images?.length && !posts?.length) {
+    if (!images?.length || !posts?.length) {
       return NextResponse.json({ error: 'Faltan images o posts' }, { status: 400 })
     }
 

@@ -1,19 +1,18 @@
 // src/app/api/render/route.ts
-// Renderiza posts asignados: descarga imágenes reales de Drive,
-// genera con fal.ai las que falten, aplica brand y devuelve URLs de GHL.
-// Soporta carruseles (múltiples slides renderizados) y posts simples.
+// Renderiza posts con brand overlay usando @napi-rs/canvas + sharp.
+// Soporta imágenes subidas localmente (thumbnail base64) y generación de fondo de marca.
+// GHL upload es opcional — si falla, devuelve data URL para que el pipeline no se bloquee.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { detectBrand, buildImagePrompt, BRAND_CONFIGS } from '@/lib/brandConfig'
+import { detectBrand } from '@/lib/brandConfig'
 import { renderImage } from '@/lib/imageRenderer'
 import { markManyAsUsed } from '@/lib/usedImages'
-import { generateImage } from '@/lib/falai'
 
 // ─── TIPOS ────────────────────────────────────────────────────────────────────
 
 interface SlideSource {
   fileId: string
-  thumbnail: string   // base64 thumbnail — usamos este para renderizar
+  thumbnail: string   // base64 data URL
 }
 
 interface AssignedPost {
@@ -41,53 +40,64 @@ interface RenderedPost {
   week: number
   suggestedDay: string
   contentDirection: string
-  // Foto simple o story:
   imageUrl?: string
   imageThumbnail?: string
-  // Carrusel:
+  videoUrl?: string
   slideUrls?: string[]
   slideThumbnails?: string[]
   source: 'drive' | 'ai'
   isCarousel: boolean
 }
 
-// ─── SUBIR IMAGEN A GHL ───────────────────────────────────────────────────────
+// ─── GHL UPLOAD (OPCIONAL) ────────────────────────────────────────────────────
 
-async function uploadToGHL(buf: Buffer, filename: string, mime: string): Promise<string> {
-  const locationId = process.env.GHL_LOCATION_ID!
-  const apiKey     = process.env.GHL_API_KEY!
-  const form       = new FormData()
-  form.append('file', new Blob([buf], { type: mime }), filename)
-  form.append('name', filename)
-  form.append('fileType', 'image')
-  form.append('altId', locationId)
-  form.append('altType', 'location')
+async function tryUploadToGHL(buf: Buffer, filename: string, mime: string): Promise<string | null> {
+  const locationId = process.env.GHL_LOCATION_ID
+  const apiKey     = process.env.GHL_API_KEY
+  if (!locationId || !apiKey || apiKey.length < 20) return null
 
-  const res = await fetch('https://services.leadconnectorhq.com/medias/upload-file', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, Version: '2021-07-28' },
-    body: form,
-  })
-  if (!res.ok) throw new Error(`GHL upload falló (${res.status}): ${(await res.text()).slice(0, 200)}`)
-  const data = await res.json()
-  const url: string = data.url ?? data.fileUrl ?? data?.data?.url ?? ''
-  if (!url) throw new Error(`GHL no devolvió URL: ${JSON.stringify(data).slice(0, 150)}`)
-  return url
+  try {
+    const form = new FormData()
+    form.append('file', new Blob([new Uint8Array(buf)], { type: mime }), filename)
+    form.append('name', filename)
+    form.append('fileType', 'image')
+    form.append('altId', locationId)
+    form.append('altType', 'location')
+
+    const res = await fetch('https://services.leadconnectorhq.com/medias/upload-file', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, Version: '2021-07-28' },
+      body: form,
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const url: string = data.url ?? data.fileUrl ?? data?.data?.url ?? ''
+    return url || null
+  } catch {
+    return null
+  }
 }
 
-// ─── THUMBNAIL BASE64 → BUFFER ────────────────────────────────────────────────
+// ─── Buffer → base64 data URL ─────────────────────────────────────────────────
+
+function bufToDataUrl(buf: Buffer, mime: string): string {
+  return `data:${mime};base64,${buf.toString('base64')}`
+}
+
+// ─── Thumbnail base64 → Buffer ────────────────────────────────────────────────
 
 function thumbnailToBuffer(dataUrl: string): Buffer {
   const [, b64] = dataUrl.split(',')
   return Buffer.from(b64, 'base64')
 }
 
-// ─── MAPEAR FORMATO ───────────────────────────────────────────────────────────
+// ─── Mapear formato ───────────────────────────────────────────────────────────
 
 function mapFormat(postFormat: string): string {
-  const f = postFormat.toLowerCase()
+  const f = (postFormat ?? '').toLowerCase()
   if (f.includes('story'))    return 'story'
   if (f.includes('landscape') || f.includes('banner')) return 'landscape'
+  if (f.includes('reel') || f.includes('video')) return 'video'
   return 'post'
 }
 
@@ -117,13 +127,11 @@ export async function POST(req: NextRequest) {
         try {
           const brand = detectBrand(post.postName, post.project)
           const renderFormat = mapFormat(post.format)
-          const config = BRAND_CONFIGS[brand]
-          const fmt = config.formats[renderFormat] ?? config.formats['post']
-          const isCarousel = post.format === 'Carousel' && (post.slides?.length ?? 0) > 1
-          const source: 'drive' | 'ai' = post.needsAI ? 'ai' : 'drive'
+          const isCarousel = (post.format ?? '').toLowerCase().includes('carrusel') ||
+                             (post.format ?? '').toLowerCase().includes('carousel')
 
           // ── CARRUSEL ──────────────────────────────────────────────────────
-          if (isCarousel && post.slides) {
+          if (isCarousel && post.slides && post.slides.length > 1) {
             const slideUrls: string[] = []
             const slideThumbnails: string[] = []
             const usedFileIds: string[] = []
@@ -134,8 +142,7 @@ export async function POST(req: NextRequest) {
                 ? post.postName
                 : `${post.postName} (${slideIdx + 1}/${post.slides.length})`
 
-              // Usar thumbnail como fuente de imagen
-              const srcBuf = thumbnailToBuffer(slide.thumbnail)
+              const srcBuf = slide.thumbnail ? thumbnailToBuffer(slide.thumbnail) : undefined
 
               const rendered = await renderImage({
                 brand,
@@ -148,13 +155,14 @@ export async function POST(req: NextRequest) {
               })
 
               const filename = `${brand}_${String(post.postId)}_slide${slideIdx + 1}_${Date.now()}.jpg`
-              const ghlUrl = await uploadToGHL(rendered.buffer, filename, rendered.mimeType)
-              slideUrls.push(ghlUrl)
-              slideThumbnails.push(slide.thumbnail)
+              const ghlUrl = await tryUploadToGHL(rendered.buffer, filename, rendered.mimeType)
+              const finalUrl = ghlUrl ?? bufToDataUrl(rendered.buffer, rendered.mimeType)
+
+              slideUrls.push(finalUrl)
+              slideThumbnails.push(slide.thumbnail ?? finalUrl)
               usedFileIds.push(slide.fileId)
             }
 
-            // Marcar todas las imágenes del carrusel como usadas
             markManyAsUsed(usedFileIds, brand, post.postName)
 
             results.push({
@@ -169,25 +177,16 @@ export async function POST(req: NextRequest) {
               contentDirection: post.contentDirection,
               slideUrls,
               slideThumbnails,
-              source,
+              source: post.needsAI ? 'ai' : 'drive',
               isCarousel: true,
             })
 
-          // ── FOTO SIMPLE / STORY ───────────────────────────────────────────
+          // ── FOTO SIMPLE / STORY / REEL ────────────────────────────────────
           } else {
-            let srcBuf: Buffer | undefined
-
-            if (!post.needsAI && post.image) {
-              srcBuf = thumbnailToBuffer(post.image.thumbnail)
-            } else {
-              // Generar con IA
-              const prompt = buildImagePrompt(
-                brand,
-                post.aiPromptHint ?? post.contentDirection ?? post.postName,
-                renderFormat
-              )
-              srcBuf = await generateImage({ prompt, width: fmt.w, height: fmt.h })
-            }
+            // Si tiene imagen local, usarla; si no, renderImage lo hace con fondo de marca
+            const srcBuf = (!post.needsAI && post.image?.thumbnail)
+              ? thumbnailToBuffer(post.image.thumbnail)
+              : undefined
 
             const rendered = await renderImage({
               brand,
@@ -200,9 +199,9 @@ export async function POST(req: NextRequest) {
             })
 
             const filename = `${brand}_${String(post.postId)}_${renderFormat}_${Date.now()}.jpg`
-            const ghlUrl = await uploadToGHL(rendered.buffer, filename, rendered.mimeType)
+            const ghlUrl = await tryUploadToGHL(rendered.buffer, filename, rendered.mimeType)
+            const finalUrl = ghlUrl ?? bufToDataUrl(rendered.buffer, rendered.mimeType)
 
-            // Marcar como usada si vino de Drive
             if (!post.needsAI && post.image) {
               markManyAsUsed([post.image.fileId], brand, post.postName)
             }
@@ -217,9 +216,9 @@ export async function POST(req: NextRequest) {
               week: post.week,
               suggestedDay: post.suggestedDay,
               contentDirection: post.contentDirection,
-              imageUrl: ghlUrl,
+              imageUrl: finalUrl,
               imageThumbnail: post.image?.thumbnail,
-              source,
+              source: post.needsAI ? 'ai' : 'drive',
               isCarousel: false,
             })
           }
@@ -231,7 +230,7 @@ export async function POST(req: NextRequest) {
       }))
 
       if (i + BATCH < assignments.length) {
-        await new Promise(r => setTimeout(r, 400))
+        await new Promise(r => setTimeout(r, 200))
       }
     }
 

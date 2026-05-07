@@ -1,7 +1,8 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import { ReportView } from '@/components/ReportView'
 
 type Phase = 'dashboard' | 'fase1' | 'fase2' | 'fase3' | 'fase4' | 'fase5' | 'reportes' | 'comparativo' | 'integraciones' | 'carga' | 'ads'
 type ContentType = 'carrusel' | 'post' | 'reel'
@@ -61,13 +62,80 @@ interface IntegrationStatus {
 }
 
 interface ReportData {
-  month?: string
-  year?: number
+  month: string
+  year: number
+  score: number
+  scoreRationale: string
+  executiveSummary: string
+  kpis: {
+    totalPosts: number
+    scheduled: number
+    schedulingRate: number
+    ghlTotal: number
+    ghlPublished: number
+    ghlScheduled: number
+    newContacts: number
+    activeOpportunities: number
+    platformsActive: number
+  }
+  byFormat:   Record<string, number>
+  byProject:  Record<string, number>
+  byPlatform: Record<string, number>
+  byWeek:     Record<string, number>
+  byStatus:   Record<string, number>
+  feedPerformance: {
+    topFormat: string
+    topPlatform: string
+    topProject: string
+    weeklyConsistency: string
+    contentMix: string
+  }
+  adsInsights: string
+  socialInsights?: string
+  adsData?: {
+    available: boolean
+    totalSpend: number
+    totalImpressions: number
+    totalReach: number
+    totalClicks: number
+    totalLeads: number
+    ctr: number
+    cpc: number
+    roas: number
+    accounts: { name: string; spend: number; impressions: number; clicks: number }[]
+    campaigns: { account: string; name: string; spend: number; impressions: number; clicks: number }[]
+  }
+  socialData?: {
+    instagram: {
+      available: boolean
+      followers: number
+      impressionsMonth: number
+      reachMonth: number
+      profileViews: number
+      postsThisMonth: number
+      avgLikes: number
+      avgComments: number
+      engagementRate: number
+    }
+    facebook: {
+      available: boolean
+      pageFans: number
+      impressionsMonth: number
+      reachMonth: number
+      engagedUsers: number
+      postsThisMonth: number
+    }
+  }
+  insights: string[]
+  wins: string[]
+  improvements: Array<{ area: string; issue: string; action: string; priority: 'alta' | 'media' | 'baja' }>
+  nextSteps: Array<{ step: number; action: string; owner: string; timeline: string; impact: string }>
+  platformStrategy: Record<string, string>
+  formatRecommendation: string
+  // legacy compat
   totalPosts?: number
   scheduled?: number
-  byFormat?: Record<string, number>
   summary?: string
-  insights?: string[]
   recommendations?: string[]
 }
 
@@ -75,7 +143,7 @@ interface UploadedMedia {
   id: string
   name: string
   mimeType: string
-  base64: string
+  file: File
   preview: string
   ghlUrl?: string
 }
@@ -96,17 +164,20 @@ interface ManualContent {
   rejectedCopies: Set<'captionIG' | 'captionFB' | 'captionLI' | 'captionGMB'>
   suggestedDates?: string[]
   wasAutoScheduled?: boolean
+  scheduleJustification?: string
   folderName?: string
 }
 
-const MONTH = 'Mayo'
-const YEAR = 2025
+const DEFAULT_MONTH = new Date().toLocaleString('es-ES', { month: 'long' }).replace(/^\w/, c => c.toUpperCase())
+const DEFAULT_YEAR = new Date().getFullYear()
 
 function Toast({ message }: { message: string }) {
   return <div className={`toast ${message ? 'show' : ''}`}>{message}</div>
 }
 
 export default function Home() {
+  const [currentMonth, setCurrentMonth] = useState(DEFAULT_MONTH)
+  const [currentYear, setCurrentYear] = useState(DEFAULT_YEAR)
   const [phase, setPhase] = useState<Phase>('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [toast, setToast] = useState('')
@@ -141,14 +212,48 @@ export default function Home() {
   const [intStatus, setIntStatus] = useState<IntegrationStatus | null>(null)
   const [openCopies, setOpenCopies] = useState<Set<number>>(new Set())
   const [boardId, setBoardId] = useState<string>('')
+  const [mondayIdMap, setMondayIdMap] = useState<Record<string, string>>({})
+  const [mondayBoardColumns, setMondayBoardColumns] = useState<Record<string, string>>({})
   const [report, setReport] = useState<ReportData | null>(null)
   const [designs, setDesigns] = useState<any[]>([])
+  // Comparativo mes vs mes
+  const [compareMonth1, setCompareMonth1] = useState(DEFAULT_MONTH)
+  const [compareYear1,  setCompareYear1]  = useState(DEFAULT_YEAR - 1)
+  const [compareMonth2, setCompareMonth2] = useState(DEFAULT_MONTH)
+  const [compareYear2,  setCompareYear2]  = useState(DEFAULT_YEAR)
+  const [compareData,   setCompareData]   = useState<any>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
   // Fase 3 — pipeline de imágenes
   const [fase3Files, setFase3Files]         = useState<File[]>([])
   const [assignedPosts, setAssignedPosts]   = useState<any[]>([])
   const [renderedPosts, setRenderedPosts]   = useState<any[]>([])
-  const [fase3Step, setFase3Step]           = useState<'idle'|'scanning'|'assigning'|'rendering'|'review'>('idle')
+  const [fase3Step, setFase3Step]           = useState<'idle'|'scanning'|'assigning'|'confirm_assignment'|'rendering'|'review'|'ai_generating'|'ai_review'>('idle')
   const [fase3Stats, setFase3Stats]         = useState<{fromDrive:number,fromAI:number,carousels:number}|null>(null)
+  // Sobrescrituras de texto por post: título y cuerpo personalizados antes del render
+  const [postTextOverrides, setPostTextOverrides] = useState<Record<string|number, {title: string; body: string}>>({})
+  // Drive scan
+  const [driveImages, setDriveImages]         = useState<any[]>([])
+  const [driveScanStatus, setDriveScanStatus] = useState<'idle'|'scanning'|'done'|'error'>('idle')
+  // Estado de generación de video por post (para UX asíncrona)
+  const [videoGenStatus, setVideoGenStatus]   = useState<Record<string|number, 'idle'|'generating'|'done'|'error'>>({})
+  // IA Media — generación automática con Claude + Higgsfield + brand overlay
+  const [aiMediaItems, setAiMediaItems]         = useState<any[]>([])
+  const [aiMediaApproval, setAiMediaApproval]   = useState<Record<string|number, 'approved'|'rejected'>>({})
+  const [aiMediaErrors, setAiMediaErrors]       = useState<any[]>([])
+  const [aiMediaRegen, setAiMediaRegen]         = useState<Set<string|number>>(new Set())
+  // Carousel slideshow — track current slide index per post
+  const [carouselSlideIdx, setCarouselSlideIdx] = useState<Record<string|number, number>>({})
+  // Job IDs de Higgsfield generados en esta sesión — para borrar al salir de Fase 3
+  const [sessionHiggsfieldJobIds, setSessionHiggsfieldJobIds] = useState<string[]>([])
+  // Edición de copy con Claude en Fase 4
+  const [copyEditOpen, setCopyEditOpen]         = useState<Record<string, boolean>>({})
+  const [copyEditInstr, setCopyEditInstr]       = useState<Record<string, string>>({})
+  const [copyEditLoading, setCopyEditLoading]   = useState<Record<string, boolean>>({})
+  // Filtros de calendario
+  const [calFilterBrand, setCalFilterBrand]     = useState('')
+  const [calFilterFormat, setCalFilterFormat]   = useState('')
+  const [calFilterPlatform, setCalFilterPlatform] = useState('')
+  const [calFilterWeek, setCalFilterWeek]       = useState(0)
   const [editingCopy, setEditingCopy]       = useState<Record<string|number,any>>({})
   // Generador de Ads
   const [adImage, setAdImage]           = useState<{base64:string;mimeType:string;preview:string} | null>(null)
@@ -170,6 +275,7 @@ export default function Home() {
   const [processingFolder, setProcessingFolder] = useState(false)
   const [showCalendarPreview, setShowCalendarPreview] = useState(false)
   const [generatingAllCaptions, setGeneratingAllCaptions] = useState(false)
+  const [previewMedia, setPreviewMedia] = useState<{url: string, type: string} | null>(null)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -190,6 +296,77 @@ export default function Home() {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (previewMedia) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [previewMedia])
+
+  // Load persistence
+  useEffect(() => {
+    async function loadData() {
+      // Try loading from Monday.com
+      try {
+        const res = await fetch('/api/briefing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'load' })
+        })
+        const data = await res.json()
+        if (res.ok && data.briefing) {
+          if (typeof data.briefing === 'string') {
+             setBriefing({ loadedContent: data.briefing })
+          } else {
+             setBriefing(data.briefing)
+          }
+          setBriefingApproved(true)
+        } else {
+          setBriefingApproved(false)
+        }
+      } catch (e) {
+        setBriefingApproved(false)
+      }
+
+      // Try loading session state from localStorage
+      const saved = localStorage.getItem(`marketing-agent-${currentMonth}-${currentYear}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (!briefingApproved && parsed.briefing) setBriefing(parsed.briefing)
+          if (parsed.calendar) setCalendar(parsed.calendar)
+          if (parsed.calendarApproved) setCalendarApproved(parsed.calendarApproved)
+          if (parsed.copyData) setCopyData(parsed.copyData)
+          if (parsed.copyApproved) setCopyApproved(parsed.copyApproved)
+          if (parsed.schedule) setSchedule(parsed.schedule)
+          if (parsed.scheduleApproved) setScheduleApproved(parsed.scheduleApproved)
+          if (parsed.ghlDone) setGhlDone(parsed.ghlDone)
+        } catch(e) {}
+      } else {
+         // Reset state for new month
+         if (!briefingApproved) setBriefing(null)
+         setCalendar([])
+         setCalendarApproved(false)
+         setCopyData([])
+         setCopyApproved(false)
+         setSchedule([])
+         setScheduleApproved(false)
+         setGhlDone(false)
+      }
+    }
+    loadData()
+  }, [currentMonth, currentYear])
+
+  // Save progress to localStorage
+  useEffect(() => {
+    const dataToSave = {
+      briefing, calendar, calendarApproved, copyData, copyApproved, schedule, scheduleApproved, ghlDone
+    }
+    localStorage.setItem(`marketing-agent-${currentMonth}-${currentYear}`, JSON.stringify(dataToSave))
+  }, [briefing, calendar, calendarApproved, copyData, copyApproved, schedule, scheduleApproved, ghlDone, currentMonth, currentYear])
+
   // ---- PHASE 1: BRIEFING ----
   async function generateBriefing() {
     setLoading(true)
@@ -198,7 +375,7 @@ export default function Home() {
       const res = await fetch('/api/briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'generate' }),
+        body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'generate' }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -218,7 +395,7 @@ export default function Home() {
       const res = await fetch('/api/briefing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'approve', briefing }),
+        body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'approve', briefing }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -239,7 +416,7 @@ export default function Home() {
       const res = await fetch('/api/calendar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'generate', briefing }),
+        body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'generate', briefing }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -255,18 +432,24 @@ export default function Home() {
   async function approveCalendar() {
     const approved = calendar.filter((_, i) => !rejectedPosts.has(i))
     setLoading(true)
-    setLoadingText('Creando items en Monday.com...')
+    setLoadingText('Aprobando calendario...')
     try {
       const res = await fetch('/api/calendar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'approve', calendar: approved }),
+        body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'approve', calendar: approved }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setBoardId(data.boardId || '')
+      if (data.mondayIdMap)     setMondayIdMap(data.mondayIdMap)
+      if (data.boardColumns)    setMondayBoardColumns(data.boardColumns)
       setCalendarApproved(true)
-      showToast(`✓ ${data.itemsCreated} posts guardados en Monday.com`)
+      if (data.warning) {
+        showToast(`✓ Calendario aprobado (Monday.com: ${data.mondayError?.slice(0,60) ?? 'sin conexión'})`)
+      } else {
+        showToast(`✓ ${data.itemsCreated ?? 0} posts guardados en Monday.com`)
+      }
     } catch (e: unknown) {
       showToast('Error: ' + String(e))
     } finally {
@@ -282,7 +465,11 @@ export default function Home() {
       const res = await fetch('/api/copy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'generate' }),
+        body: JSON.stringify({
+          month: currentMonth, year: currentYear, action: 'generate',
+          // Pasar el calendario completo para que Claude tenga format, platforms, contentDirection
+          calendar: calendar.filter((_, i) => !rejectedPosts.has(i)),
+        }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -303,16 +490,78 @@ export default function Home() {
       const res = await fetch('/api/copy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'save', boardId, copyItems: copyData }),
+        body: JSON.stringify({
+          month: currentMonth, year: currentYear, action: 'save',
+          boardId, boardColumns: mondayBoardColumns, mondayIdMap, copyItems: copyData,
+        }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      
+      // Sincronizar copy a Monday explícitamente
+      if (boardId && mondayBoardColumns) {
+        setLoadingText('Sincronizando copy con Monday.com...')
+        for (const copyItem of copyData) {
+          const postId = String(copyItem.postId ?? copyItem.postName)
+          const mondayItemId = mondayIdMap[postId]
+          if (mondayItemId) {
+            try {
+              await fetch('/api/update-copy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  boardId,
+                  itemId: mondayItemId,
+                  columns: mondayBoardColumns,
+                  copyData: {
+                    ig: copyItem.copyIG,
+                    fb: copyItem.copyFB,
+                    li: copyItem.copyLI,
+                    gmb: copyItem.copyGMB,
+                  },
+                }),
+              })
+              await new Promise(r => setTimeout(r, 100))
+            } catch (err) {
+              console.warn(`[page] No se pudo actualizar copy en Monday para ${postId}:`, err)
+            }
+          }
+        }
+      }
+      
       setCopyApproved(true)
-      showToast('✓ Copy aprobado y guardado en Monday.com')
+      const warn = data.warning ? ` (${data.warning})` : ''
+      showToast(`✓ Copy aprobado — ${data.savedCount ?? 0} posts guardados en Monday.com${warn}`)
     } catch (e: unknown) {
       showToast('Error: ' + String(e))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function editCopyWithClaude(
+    postId: string|number, platform: string, currentCopy: string,
+    instruction: string, postName: string, project: string
+  ) {
+    const key = `${postId}_${platform}`
+    setCopyEditLoading(prev => ({ ...prev, [key]: true }))
+    try {
+      const res = await fetch('/api/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'edit', platform, currentCopy, instruction, postName, project }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      const platformKey = `copy${platform}` as keyof CopyItem
+      setCopyData(prev => prev.map(c => c.postId === postId ? { ...c, [platformKey]: data.editedCopy } : c))
+      setCopyEditOpen(prev => ({ ...prev, [key]: false }))
+      setCopyEditInstr(prev => ({ ...prev, [key]: '' }))
+      showToast('✓ Copy editado')
+    } catch (e: unknown) {
+      showToast('Error: ' + String(e))
+    } finally {
+      setCopyEditLoading(prev => ({ ...prev, [key]: false }))
     }
   }
 
@@ -324,7 +573,7 @@ export default function Home() {
       const res = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'generate', copyData }),
+        body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'generate', copyData }),
       })
       const data = await res.json()
       if (data.error) throw new Error(data.error)
@@ -341,24 +590,101 @@ export default function Home() {
   async function sendToGHL() {
     setScheduleApproved(true)
     setLoading(true)
-    setLoadingText('Enviando a GHL...')
     let progress = 0
     const interval = setInterval(() => {
-      progress = Math.min(progress + 12, 90)
+      progress = Math.min(progress + 8, 85)
       setGhlProgress(progress)
     }, 500)
     try {
+      // Step 1: subir a GHL cualquier design que todavía sea data URL (de Fase 3 IA)
+      let resolvedDesigns = [...designs]
+      const pendingUploads = designs.filter(d => d.dataUrl && !d.imageUrl && !d.videoUrl)
+
+      if (pendingUploads.length > 0) {
+        setLoadingText(`Subiendo ${pendingUploads.length} medios a GHL...`)
+        const uploadItems = pendingUploads.map((d: any) => ({
+          postId:   d.postId,
+          dataUrl:  d.dataUrl,
+          mimeType: d.mediaType === 'video' ? 'video/mp4' : 'image/jpeg',
+          filename: `${d.brand ?? 'noriega'}_${d.postId}.${d.mediaType === 'video' ? 'mp4' : 'jpg'}`,
+          isGhlUrl: false,
+        }))
+        const uploadRes = await fetch('/api/approve-media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: uploadItems }),
+        })
+        const uploadData = await uploadRes.json()
+        const urlMap: Record<string, string> = {}
+        for (const r of (uploadData.results ?? [])) {
+          if (r.ghlUrl) urlMap[String(r.postId)] = r.ghlUrl
+        }
+        resolvedDesigns = designs.map((d: any) => {
+          const ghlUrl = urlMap[String(d.postId)]
+          if (!ghlUrl) return d
+          return {
+            ...d,
+            imageUrl: d.mediaType !== 'video' ? ghlUrl : undefined,
+            videoUrl: d.mediaType === 'video'  ? ghlUrl : undefined,
+          }
+        })
+        setDesigns(resolvedDesigns)
+      }
+
+      // Step 2: fusionar schedule con diseños ya resueltos
+      setLoadingText('Programando posts en GHL...')
+      const scheduleWithMedia = schedule.map((item: any) => {
+        const design = resolvedDesigns.find((d: any) =>
+          String(d.postId) === String(item.postId) || d.postName === item.postName
+        )
+        return {
+          ...item,
+          imageUrl:   design?.imageUrl   ?? item.imageUrl,
+          slideUrls:  design?.slideUrls  ?? item.slideUrls,
+          videoUrl:   design?.videoUrl   ?? item.videoUrl,
+          isCarousel: design?.isCarousel ?? item.isCarousel,
+          format:     design?.format     ?? item.format,
+        }
+      })
+
       const res = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month: MONTH, year: YEAR, action: 'send_to_ghl', schedule, boardId }),
+        body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'send_to_ghl', schedule: scheduleWithMedia, boardId }),
       })
       const data = await res.json()
       clearInterval(interval)
       setGhlProgress(100)
       if (data.error) throw new Error(data.error)
+      
+      // Sincronizar status de programación a Monday
+      if (boardId && mondayBoardColumns) {
+        setLoadingText('Actualizando status en Monday.com...')
+        for (const item of schedule) {
+          const postId = String(item.postId ?? item.postName)
+          const mondayItemId = mondayIdMap[postId]
+          if (mondayItemId) {
+            try {
+              await fetch('/api/update-schedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  boardId,
+                  itemId: mondayItemId,
+                  columns: mondayBoardColumns,
+                  status: 'programado',
+                }),
+              })
+              await new Promise(r => setTimeout(r, 100))
+            } catch (err) {
+              console.warn(`[page] No se pudo actualizar status en Monday para ${postId}:`, err)
+            }
+          }
+        }
+      }
+      
       setTimeout(() => setGhlDone(true), 500)
-      showToast(`✓ ${data.success} posts programados en GHL`)
+      showToast(`✓ ${data.success} posts programados en GHL — actualizados en Monday.com`)
     } catch (e: unknown) {
       clearInterval(interval)
       showToast('Error: ' + String(e))
@@ -370,14 +696,14 @@ export default function Home() {
   // ---- REPORTS ----
   async function loadReport() {
     setLoading(true)
-    setLoadingText('Generando reporte...')
+    setLoadingText(`Analizando ${currentMonth} ${currentYear} — Monday.com + GHL + Claude Sonnet...`)
     try {
-      const res = await fetch(`/api/reports?month=${MONTH}&year=${YEAR}`)
+      const res = await fetch(`/api/reports?month=${encodeURIComponent(currentMonth)}&year=${currentYear}`)
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setReport(data.report)
     } catch (e: unknown) {
-      showToast('Error: ' + String(e))
+      showToast('Error generando reporte: ' + String(e))
     } finally {
       setLoading(false)
     }
@@ -395,7 +721,7 @@ export default function Home() {
       const w = pdf.internal.pageSize.getWidth()
       const h = (canvas.height * w) / canvas.width
       pdf.addImage(imgData, 'PNG', 0, 0, w, h)
-      pdf.save(`Noriega_Reporte_${MONTH}_${YEAR}.pdf`)
+      pdf.save(`Noriega_Reporte__.pdf`)
       showToast('✓ Reporte exportado a PDF')
     } catch (e) {
       showToast('Error exportando: ' + String(e))
@@ -404,8 +730,71 @@ export default function Home() {
     }
   }
 
+  async function scanGoogleDrive() {
+    setDriveScanStatus('scanning')
+    try {
+      const rootId = process.env.NEXT_PUBLIC_DRIVE_ROOT_ID || ''
+      const res = await fetch('/api/drive-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: rootId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Drive scan error')
+      setDriveImages(data.images ?? [])
+      setDriveScanStatus('done')
+      showToast(`✓ ${data.images?.length ?? 0} imágenes encontradas en Drive`)
+    } catch (e) {
+      setDriveScanStatus('error')
+      showToast('Error Drive: ' + String(e))
+    }
+  }
+
+  async function runFase3WithDrive() {
+    // Usar imágenes de Drive como fuente en lugar de archivos locales
+    if (driveImages.length === 0) { showToast('Primero escanea Google Drive'); return }
+    setFase3Step('assigning')
+    setLoading(true)
+    setLoadingText(`Claude analiza ${driveImages.length} imágenes de Drive...`)
+    try {
+      const postsToAssign = calendar.filter((_, i) => !rejectedPosts.has(i))
+      const assignRes = await fetch('/api/vision-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: driveImages, posts: postsToAssign }),
+      })
+      const assignData = await assignRes.json()
+      if (!assignRes.ok) throw new Error(assignData.error ?? `Vision error ${assignRes.status}`)
+      setAssignedPosts(assignData.assignments)
+      setFase3Step('confirm_assignment')
+      showToast('✓ Imágenes de Drive asignadas. Revisa y confirma.')
+    } catch (e: unknown) {
+      showToast('Error asignando imágenes de Drive: ' + String(e))
+      setFase3Step('idle')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function runFase3() {
-    if (fase3Files.length === 0) { showToast('Selecciona al menos una imagen'); return }
+    if (fase3Files.length === 0) {
+      // Generar todo con IA hiperrealista si no hay imágenes locales
+      const postsToAssign = calendar.filter((_, i) => !rejectedPosts.has(i)).map((p, i) => ({
+        postId: p.id || i,
+        postName: p.name,
+        format: p.format,
+        project: p.project,
+        contentDirection: p.contentDirection,
+        platforms: p.platforms,
+        week: p.week,
+        suggestedDay: p.suggestedDay,
+        needsAI: true
+      }))
+      setAssignedPosts(postsToAssign)
+      setFase3Step('confirm_assignment')
+      showToast('✓ Todo se generará con IA. Confirma para renderizar.')
+      return
+    }
 
     // PASO A: Procesar imágenes locales
     setFase3Step('scanning')
@@ -456,14 +845,36 @@ export default function Home() {
       if (!assignRes.ok) throw new Error(assignData.error ?? `Vision error ${assignRes.status}`)
       setAssignedPosts(assignData.assignments)
 
-      // PASO C: Renderizar con marca
-      setFase3Step('rendering')
-      setLoadingText(`Renderizando ${assignData.assignments.length} posts (${assignData.needsAI} con IA generativa)...`)
+      // PASO B.2: Confirmación manual de orden
+      setFase3Step('confirm_assignment')
+      showToast('✓ Imágenes asignadas. Revisa y confirma el orden.')
 
+    } catch (e: unknown) {
+      showToast('Error Fase 3: ' + String(e))
+      setFase3Step('idle')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function confirmAndRender() {
+    setFase3Step('rendering')
+    setLoading(true)
+    setLoadingText(`Aplicando marca a ${assignedPosts.length} posts...`)
+    try {
+      // Mezclar overrides de texto con los posts asignados
+      const assignmentsWithText = assignedPosts.map(p => {
+        const override = postTextOverrides[p.postId]
+        return {
+          ...p,
+          ...(override?.title ? { postName: override.title } : {}),
+          ...(override?.body  ? { contentDirection: override.body } : {}),
+        }
+      })
       const renderRes = await fetch('/api/render', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignments: assignData.assignments }),
+        body: JSON.stringify({ assignments: assignmentsWithText }),
       })
       const renderData = await renderRes.json()
       if (!renderRes.ok) throw new Error(renderData.error ?? `Render error ${renderRes.status}`)
@@ -473,13 +884,24 @@ export default function Home() {
       setFase3Stats({ fromDrive: renderData.fromDrive, fromAI: renderData.fromAI, carousels: renderData.carousels })
       setFase3Step('review')
       showToast(`✓ ${renderData.rendered} posts listos para revisión`)
-
     } catch (e: unknown) {
-      showToast('Error Fase 3: ' + String(e))
-      setFase3Step('idle')
+      showToast('Error Fase 3 (Render): ' + String(e))
+      setFase3Step('confirm_assignment')
     } finally {
       setLoading(false)
     }
+  }
+
+  function moveSlide(postId: string | number, fromIndex: number, toIndex: number) {
+    setAssignedPosts(prev => prev.map(p => {
+      if (p.postId === postId && p.slides) {
+        const newSlides = [...p.slides]
+        const [moved] = newSlides.splice(fromIndex, 1)
+        newSlides.splice(toIndex, 0, moved)
+        return { ...p, slides: newSlides }
+      }
+      return p
+    }))
   }
 
   async function rejectAndRegenerate(post: any) {
@@ -539,7 +961,7 @@ export default function Home() {
         body: JSON.stringify({
           imageBase64: adImage.base64,
           mimeType: adImage.mimeType,
-          idea: adIdea,
+          idea: `${adIdea} (IMPORTANT: Generate the copy variations completely in English)`,
           project: adProject,
         }),
       })
@@ -600,6 +1022,203 @@ export default function Home() {
     navTo('fase4')
   }
 
+  // ---- LIMPIEZA HIGGSFIELD — borra SOLO los jobs de esta sesión ----
+  async function cleanupHiggsfield(jobIds: string[]) {
+    if (jobIds.length === 0) return
+    try {
+      await fetch('/api/higgsfield-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobIds }),
+      })
+      setSessionHiggsfieldJobIds([])
+    } catch { /* silencioso — no interrumpir el flujo principal */ }
+  }
+
+  // ---- GENERACIÓN IA (Claude prompt → Higgsfield → brand overlay) ----
+  async function generateAIMedia() {
+    if (!calendarApproved || calendar.length === 0) {
+      showToast('Aprueba el calendario primero')
+      return
+    }
+    const posts = calendar.filter((_, i) => !rejectedPosts.has(i))
+    setFase3Step('ai_generating')
+    setLoading(true)
+    setLoadingText(`Claude genera prompts y Higgsfield crea ${posts.length} imágenes/videos...`)
+    setAiMediaItems([])
+    setAiMediaApproval({})
+    setAiMediaErrors([])
+    setSessionHiggsfieldJobIds([])
+    try {
+      const res = await fetch('/api/generate-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posts }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setAiMediaItems(data.items ?? [])
+      setAiMediaErrors(data.errors ?? [])
+      // Guardar todos los job IDs de Higgsfield de esta sesión
+      const allJobIds: string[] = (data.items ?? []).flatMap((m: any) => m.higgsfieldJobIds ?? [])
+      setSessionHiggsfieldJobIds(allJobIds)
+      setFase3Step('ai_review')
+      showToast(`✓ ${data.generated} medios generados — revisa y aprueba`)
+    } catch (e: unknown) {
+      showToast('Error: ' + String(e))
+      setFase3Step('idle')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function regenerateOneAIMedia(item: any) {
+    const postFromCal = calendar.find((p: any) => String(p.id ?? p.postId) === String(item.postId))
+    if (!postFromCal) { showToast('Post no encontrado en calendario'); return }
+    setAiMediaRegen(prev => new Set(prev).add(item.postId))
+    try {
+      const res = await fetch('/api/generate-media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posts: [postFromCal] }),
+      })
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      if (data.items?.[0]) {
+        const newItem = data.items[0]
+        // Borrar en Higgsfield los jobs viejos de este post específico
+        const oldItem = aiMediaItems.find(m => String(m.postId) === String(item.postId))
+        if (oldItem?.higgsfieldJobIds?.length) {
+          cleanupHiggsfield(oldItem.higgsfieldJobIds)
+          setSessionHiggsfieldJobIds(prev =>
+            prev.filter(id => !(oldItem.higgsfieldJobIds ?? []).includes(id))
+              .concat(newItem.higgsfieldJobIds ?? [])
+          )
+        } else {
+          setSessionHiggsfieldJobIds(prev => prev.concat(newItem.higgsfieldJobIds ?? []))
+        }
+        setAiMediaItems(prev => prev.map(m =>
+          String(m.postId) === String(item.postId) ? newItem : m
+        ))
+        setAiMediaApproval(prev => {
+          const next = { ...prev }
+          delete next[item.postId]
+          return next
+        })
+        
+        // Sincronizar rechazo → regeneración con Monday
+        const postId = String(item.postId ?? item.postName)
+        const mondayItemId = mondayIdMap[postId]
+        if (boardId && mondayItemId && mondayBoardColumns) {
+          try {
+            await fetch('/api/update-design', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                boardId,
+                itemId: mondayItemId,
+                columns: mondayBoardColumns,
+                designUrl: newItem.dataUrl ? newItem.dataUrl.slice(0, 100) + '...' : 'Regenerado',
+                status: 'aprobado',
+              }),
+            })
+          } catch (err) {
+            console.warn('[page] No se pudo actualizar Monday al regenerar:', err)
+          }
+        }
+        
+        showToast('✓ Regenerado')
+      }
+    } catch (e: unknown) {
+      showToast('Error regenerando: ' + String(e))
+    } finally {
+      setAiMediaRegen(prev => { const s = new Set(prev); s.delete(item.postId); return s })
+    }
+  }
+
+  // Aprueba los diseños generados por IA — los guarda localmente (sin subir a GHL todavía)
+  // La subida a GHL ocurre en Fase 5 cuando se programa el contenido
+  async function approveAIMedia() {
+    const approved = aiMediaItems.filter(m => aiMediaApproval[m.postId] !== 'rejected')
+    if (approved.length === 0) { showToast('No hay medios aprobados'); return }
+    setLoading(true)
+    setLoadingText('Guardando diseños aprobados...')
+    try {
+      // Guardar como data URLs — se subirán a GHL en Fase 5
+      const designItems = approved.map(m => ({
+        postId:           m.postId,
+        postName:         m.postName,
+        brand:            m.brand,
+        format:           m.format,
+        project:          m.project,
+        platforms:        m.platforms,
+        week:             m.week,
+        suggestedDay:     m.suggestedDay,
+        contentDirection: m.contentDirection,
+        dataUrl:          m.dataUrl,
+        slides:           m.slides,
+        mediaType:        m.mediaType,
+        isCarousel:       m.mediaType === 'carousel',
+        source:           'ai',
+      }))
+
+      setDesigns(designItems)
+      setRenderedPosts(designItems)
+
+      // Sincronizar diseños aprobados a Monday ANTES de ir a fase 4
+      if (boardId && mondayBoardColumns) {
+        setLoadingText('Sincronizando diseños con Monday.com...')
+        for (const design of designItems) {
+          const postId = String(design.postId ?? design.postName)
+          const mondayItemId = mondayIdMap[postId]
+          if (mondayItemId) {
+            try {
+              await fetch('/api/update-design', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  boardId,
+                  itemId: mondayItemId,
+                  columns: mondayBoardColumns,
+                  designUrl: design.dataUrl ? design.dataUrl.slice(0, 100) + '...' : 'Aprobado',
+                  status: 'aprobado',
+                }),
+              })
+              await new Promise(r => setTimeout(r, 100))
+            } catch (err) {
+              console.warn(`[page] No se pudo actualizar diseño en Monday para ${postId}:`, err)
+            }
+          }
+        }
+      }
+
+      navTo('fase4')
+
+      // Borrar de Higgsfield los jobs de esta sesión (ya descargados localmente)
+      cleanupHiggsfield(sessionHiggsfieldJobIds)
+
+      // Generar copy automáticamente al llegar a Fase 4
+      setLoadingText('Redactando copy por plataforma con Claude...')
+      const copyRes = await fetch('/api/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: currentMonth, year: currentYear, action: 'generate',
+          calendar: calendar.filter((_, i) => !rejectedPosts.has(i)),
+        }),
+      })
+      const copyJson = await copyRes.json()
+      if (copyJson.error) throw new Error(copyJson.error)
+      setCopyData(copyJson.copy)
+      if (copyJson.boardId) setBoardId(copyJson.boardId)
+      showToast(`✓ ${approved.length} diseños aprobados — copy listo para revisar`)
+    } catch (e: unknown) {
+      showToast('Error: ' + String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // ---- CARGA RÁPIDA ----
 
   function addManualItem() {
@@ -654,6 +1273,16 @@ export default function Home() {
     }))
   }
 
+  function moveManualMedia(itemId: string, fromIndex: number, toIndex: number) {
+    setManualItems(prev => prev.map(item => {
+      if (item.id !== itemId) return item
+      const newFiles = [...item.files]
+      const [moved] = newFiles.splice(fromIndex, 1)
+      newFiles.splice(toIndex, 0, moved)
+      return { ...item, files: newFiles }
+    }))
+  }
+
   function toggleCaptionsExpand(id: string) {
     setExpandedCaptions(prev => {
       const next = new Set(prev)
@@ -694,20 +1323,31 @@ export default function Home() {
     const newMedia: UploadedMedia[] = []
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i]
-      const base64 = await fileToBase64(file)
       newMedia.push({
         id: `f-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
         name: file.name,
         mimeType: file.type,
-        base64,
+        file: file,
         preview: URL.createObjectURL(file),
       })
     }
 
     setManualItems(prev => prev.map(item => {
       if (item.id !== itemId) return item
-      const merged = append ? [...item.files, ...newMedia] : newMedia
-      return { ...item, files: merged.slice(0, 10) }
+      let merged: UploadedMedia[]
+      if (append) {
+        merged = [...item.files, ...newMedia]
+      } else {
+        item.files.forEach(f => URL.revokeObjectURL(f.preview))
+        merged = newMedia
+      }
+      
+      if (merged.length > 10) {
+        const clipped = merged.slice(10)
+        clipped.forEach(f => URL.revokeObjectURL(f.preview))
+        merged = merged.slice(0, 10)
+      }
+      return { ...item, files: merged }
     }))
   }
 
@@ -720,10 +1360,10 @@ export default function Home() {
       const body: Record<string, string> = {
         contentType: item.type,
         title: item.title,
-        description: item.description,
+        description: item.description ? `${item.description} (IMPORTANT: Write all captions strictly in English)` : '(IMPORTANT: Write all captions strictly in English)',
       }
       if (firstImg) {
-        body.imageBase64 = firstImg.base64
+        body.imageBase64 = await fileToBase64(firstImg.file)
         body.mimeType = firstImg.mimeType
       }
       const res = await fetch('/api/generate-captions', {
@@ -756,15 +1396,20 @@ export default function Home() {
     try {
       // Step 1: upload files to GHL and collect URLs
       const itemsWithUrls: (ManualContent & { resolvedUrls: string[] })[] = []
+      const itemsWithErrors: string[] = []
+
       for (let i = 0; i < ready.length; i++) {
         const item = ready[i]
         const resolvedUrls: string[] = []
+        let itemHasError = false
+
         for (const file of item.files) {
           if (file.ghlUrl) { resolvedUrls.push(file.ghlUrl); continue }
-          const blob = base64ToBlob(file.base64, file.mimeType)
+          try {
             const form = new FormData()
-            form.append('file', blob, file.name)
+            form.append('file', file.file, file.name)
             const res = await fetch('/api/upload', { method: 'POST', body: form })
+            if (!res.ok) throw new Error(`HTTP ${res.status}`)
             const d = await res.json()
             if (d.url) {
               resolvedUrls.push(d.url)
@@ -772,12 +1417,23 @@ export default function Home() {
                 files: item.files.map(f => f.id === file.id ? { ...f, ghlUrl: d.url } : f)
               })
             } else if (d.error) {
-              throw new Error(`Upload fallido: ${d.error}`)
+              throw new Error(d.error)
             }
+          } catch(err) {
+            itemHasError = true
+            itemsWithErrors.push(`[${item.title}] Archivo ${file.name}: ${err}`)
+          }
         }
-        itemsWithUrls.push({ ...item, resolvedUrls })
+        if (!itemHasError) {
+          itemsWithUrls.push({ ...item, resolvedUrls })
+        }
         setQuickProgress(Math.round(((i + 1) / ready.length) * 50))
       }
+
+      if (itemsWithUrls.length === 0) {
+        throw new Error(`Ningún post pudo prepararse. Errores:\n${itemsWithErrors.join('\n')}`)
+      }
+
       // Step 2: schedule in GHL (excluyendo copys rechazados)
       const res = await fetch('/api/quick-schedule', {
         method: 'POST',
@@ -802,6 +1458,7 @@ export default function Home() {
           })
         })
       })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setQuickProgress(100)
@@ -812,13 +1469,16 @@ export default function Home() {
       setManualItems(prev => prev.map(item =>
         sentIds.has(item.id) ? { ...item, status: 'programado' } : item
       ))
-      if (data.errCount > 0) {
-        const errMsgs = (data.results as {id:string;platform:string;status:string;error?:string}[])
-          .filter(r => r.status === 'error' && r.error)
-          .map(r => `[${r.platform}] ${r.error}`)
-          .join('\n')
-        setQuickError(errMsgs)
-        showToast(`⚠ ${data.okCount} enviadas, ${data.errCount} errores`)
+      
+      const ghlErrors = (data.results as {id:string;platform:string;status:string;error?:string}[])
+        .filter(r => r.status === 'error' && r.error)
+        .map(r => `[${r.platform}] ${r.error}`)
+      
+      const allErrors = [...itemsWithErrors, ...ghlErrors]
+      
+      if (allErrors.length > 0) {
+        setQuickError(allErrors.join('\n'))
+        showToast(`⚠ ${data.okCount} enviadas, ${allErrors.length} errores`)
       } else {
         setQuickError('')
         showToast(`✓ ${data.okCount} publicaciones enviadas al calendario de GHL`)
@@ -840,7 +1500,7 @@ export default function Home() {
     return 'post'
   }
 
-  function suggestScheduleForItem(index: number): { date: string; time: string } {
+  function suggestScheduleForItem(index: number): { date: string; time: string; justification: string } {
     const today = new Date()
     // Sugerir fechas distribuidas (cada día diferente si es posible, de 10-14h o 18-22h)
     const daysOffset = Math.floor(index / 2)
@@ -849,8 +1509,16 @@ export default function Home() {
     const dateStr = schedDate.toISOString().split('T')[0]
     
     // Alternar entre mañana (10-14h) y tarde/noche (18-22h)
-    const timeStr = index % 2 === 0 ? '12:00' : '19:00'
-    return { date: dateStr, time: timeStr }
+    const isMorning = index % 2 === 0
+    const timeStr = isMorning ? '12:00' : '19:00'
+
+    const daysEs = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+    const dayName = daysEs[schedDate.getDay()]
+    const justification = `Agendado el ${dayName} a las ${timeStr} porque ${
+      isMorning ? 'aprovecha el pico de tráfico durante la pausa laboral del mediodía' : 'capta a la audiencia en su tiempo libre al final del día'
+    }, asegurando un buen espaciado entre publicaciones para no competir por atención.`
+
+    return { date: dateStr, time: timeStr, justification }
   }
 
   async function generateAllCaptions() {
@@ -905,62 +1573,102 @@ export default function Home() {
         // Extraer nombre de carpeta del path (webkitRelativePath o name)
         const path = (file as any).webkitRelativePath || file.name
         const parts = path.split('/')
-        const folderName = parts.length > 1 ? parts[0] : 'contenido'
+        // Agrupar por la carpeta contenedora directa de los archivos (permite subir una carpeta con múltiples carpetas adentro)
+        const folderName = parts.length > 1 ? parts[parts.length - 2] : 'contenido'
         
         if (!folderMap[folderName]) folderMap[folderName] = []
         folderMap[folderName].push(file)
       }
       
-      // Crear item por carpeta
-      let baseDate = new Date()
+      // Preparar array para enviar a Claude
+      const pendingItems: any[] = []
       let itemIndex = 0
       
       for (const [folderName, folderFiles] of Object.entries(folderMap)) {
         const contentType = autoDetectContentType(folderName)
-        const imageFiles = Array.from(folderFiles).filter(f => f.type.startsWith('image/'))
+        // Filtrar imágenes y videos (para incluir reels en el flujo)
+        const mediaFiles = Array.from(folderFiles).filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
         
-        if (imageFiles.length === 0) continue
+        if (mediaFiles.length === 0) continue
         
-        const { date, time } = suggestScheduleForItem(itemIndex)
+        pendingItems.push({
+          id: `mc-${Date.now()}-${itemIndex}`,
+          type: contentType,
+          title: folderName.replace(/_/g, ' '),
+          folderName,
+          mediaFiles
+        })
+        itemIndex++
+      }
+
+      if (pendingItems.length === 0) {
+        showToast('No se encontraron imágenes o videos en las carpetas.')
+        setProcessingFolder(false)
+        return
+      }
+
+      // Llamar a Claude para organizar estratégicamente el calendario
+      setLoadingText('Claude está organizando tu calendario...')
+      let claudeSchedule: any[] = []
+      try {
+        const res = await fetch('/api/smart-schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: pendingItems.map(i => ({ id: i.id, type: i.type, title: i.title }))
+          })
+        })
+        const data = await res.json()
+        if (data.schedule) claudeSchedule = data.schedule
+      } catch (e) {
+        console.error("Error al usar Claude para el calendario", e)
+      }
+
+      setLoadingText('Cargando archivos en la interfaz...')
+      const newManualItems: ManualContent[] = []
+
+      for (let i = 0; i < pendingItems.length; i++) {
+        const pItem = pendingItems[i]
+        // Usar respuesta de Claude o el fallback local si la API falló
+        const scheduleInfo = claudeSchedule.find((s: any) => s.id === pItem.id) || suggestScheduleForItem(i)
         
         const newMedia: UploadedMedia[] = []
-        for (let i = 0; i < imageFiles.length; i++) {
-          const file = imageFiles[i]
-          const base64 = await fileToBase64(file)
+        for (let j = 0; j < pItem.mediaFiles.length; j++) {
+          const file = pItem.mediaFiles[j]
           newMedia.push({
-            id: `f-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
+            id: `f-${Date.now()}-${j}-${Math.random().toString(36).slice(2)}`,
             name: file.name,
             mimeType: file.type,
-            base64,
+            file: file,
             preview: URL.createObjectURL(file),
           })
         }
         
-        const newItem: ManualContent = {
-          id: `mc-${Date.now()}-${itemIndex}`,
-          type: contentType,
-          title: folderName.replace(/_/g, ' '),
+        newManualItems.push({
+          id: pItem.id,
+          type: pItem.type,
+          title: pItem.title,
           description: '',
           files: newMedia.slice(0, 10),
           platforms: ['IG', 'FB'],
-          scheduledDate: date,
-          scheduledTime: time,
+          scheduledDate: scheduleInfo.date,
+          scheduledTime: scheduleInfo.time,
+          scheduleJustification: scheduleInfo.justification,
           status: 'borrador',
           captions: { captionIG: '', captionFB: '', captionLI: '', captionGMB: '' },
           captionsGenerated: false,
           generatingCaptions: false,
           rejectedCopies: new Set(),
           wasAutoScheduled: true,
-          folderName,
-        }
-        
-        setManualItems(prev => [...prev, newItem])
-        itemIndex++
+          folderName: pItem.folderName,
+        })
       }
+      
+      setManualItems(prev => [...prev, ...newManualItems])
       
       setProcessingFolder(false)
       setLoadingText('')
-      showToast(`✓ ${itemIndex} contenidos cargados de la carpeta`)
+      showToast(`✓ ${pendingItems.length} contenidos organizados por Claude`)
     } catch (e) {
       setProcessingFolder(false)
       setLoadingText('')
@@ -971,7 +1679,7 @@ export default function Home() {
   const pipelineStatus = (p: number) => {
     if (p === 1) return briefingApproved ? 'done' : briefing ? 'active' : 'pending'
     if (p === 2) return calendarApproved ? 'done' : calendar.length > 0 ? 'active' : briefingApproved ? 'active' : 'pending'
-    if (p === 3) return 'pending' // designs phase
+    if (p === 3) return renderedPosts.length > 0 || aiMediaItems.length > 0 ? 'done' : fase3Step !== 'idle' ? 'active' : calendarApproved ? 'active' : 'pending'
     if (p === 4) return copyApproved ? 'done' : copyData.length > 0 ? 'active' : calendarApproved ? 'active' : 'pending'
     if (p === 5) return ghlDone ? 'done' : schedule.length > 0 ? 'active' : copyApproved ? 'active' : 'pending'
     return 'pending'
@@ -1014,6 +1722,20 @@ export default function Home() {
       <Toast message={toast} />
       <div className="overlay" id="overlay" onClick={() => setSidebarOpen(false)} style={{ display: sidebarOpen ? 'block' : 'none' }} />
 
+      {/* VISOR DE MEDIA (MODAL) */}
+      {previewMedia && (
+        <div style={{position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20}} onClick={() => setPreviewMedia(null)}>
+          <div style={{position: 'relative', maxWidth: '100%', maxHeight: '100%'}} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setPreviewMedia(null)} style={{position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer'}}>✕</button>
+            {previewMedia.type.startsWith('video/') ? (
+              <video src={previewMedia.url} controls autoPlay style={{maxWidth: '90vw', maxHeight: '85vh', borderRadius: 8}} />
+            ) : (
+              <img src={previewMedia.url} alt="Preview" style={{maxWidth: '90vw', maxHeight: '85vh', borderRadius: 8, objectFit: 'contain'}} />
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="layout">
         {/* SIDEBAR */}
         <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
@@ -1030,27 +1752,34 @@ export default function Home() {
           <nav className="sidebar-nav">
             <div className="nav-section">Pipeline</div>
             {([
-              ['dashboard', 'Dashboard'],
-              ['fase1', 'Fase 1 — Briefing'],
-              ['fase2', 'Fase 2 — Calendario'],
-              ['fase3', 'Fase 3 — Diseños'],
-              ['fase4', 'Fase 4 — Copy'],
-              ['fase5', 'Fase 5 — Programar'],
-            ] as [Phase, string][]).map(([p, label]) => (
-              <div key={p} className={`nav-item${phase === p ? ' active' : ''}`} onClick={() => navTo(p)}>
-                {label}
-                {p === 'fase2' && calendar.length > 0 && (
-                  <span className="nav-badge">{calendar.length}</span>
-                )}
+              ['dashboard', 'Dashboard', null],
+              ['fase1', 'Fase 1 — Briefing', briefingApproved ? 'done' : briefing ? 'active' : null],
+              ['fase2', 'Fase 2 — Calendario', calendarApproved ? 'done' : calendar.length > 0 ? 'active' : null],
+              ['fase3', 'Fase 3 — Diseños', renderedPosts.length > 0 || aiMediaItems.length > 0 ? 'done' : fase3Step !== 'idle' ? 'active' : null],
+              ['fase4', 'Fase 4 — Copy', copyApproved ? 'done' : copyData.length > 0 ? 'active' : null],
+              ['fase5', 'Fase 5 — Programar', ghlDone ? 'done' : schedule.length > 0 ? 'active' : null],
+            ] as [Phase, string, string|null][]).map(([p, label, status]) => (
+              <div key={p} className={`nav-item${phase === p ? ' active' : ''}`} onClick={() => navTo(p)}
+                style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <span>{label}</span>
+                <span style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+                  {p === 'fase2' && calendar.length > 0 && (
+                    <span className="nav-badge">{calendar.length}</span>
+                  )}
+                  {status === 'done' && <span style={{fontSize:11,color:'var(--teal)',fontWeight:700}}>✓</span>}
+                  {status === 'active' && <span style={{width:7,height:7,borderRadius:'50%',background:'var(--yellow,#f59e0b)',display:'inline-block',flexShrink:0}}/>}
+                </span>
               </div>
             ))}
 
-            <div className={`nav-item${phase === 'carga' ? ' active' : ''}`} onClick={() => navTo('carga')}>
-              Carga Rápida
+            <div className="nav-section">Acciones rápidas</div>
+            <div className={`nav-item${phase === 'carga' ? ' active' : ''}`} onClick={() => navTo('carga')}
+              style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span>Carga Rápida</span>
               {manualItems.length > 0 && <span className="nav-badge">{manualItems.length}</span>}
             </div>
             <div className={`nav-item${phase === 'ads' ? ' active' : ''}`} onClick={() => navTo('ads')}>
-              🎯 Generador de Ads
+              Generador de Ads
             </div>
 
             <div className="nav-section">Reportes</div>
@@ -1064,7 +1793,7 @@ export default function Home() {
           <div className="sidebar-footer">
             <div className="month-selector">
               <div>
-                <div className="month-label">{MONTH} {YEAR}</div>
+                <div className="month-label">{currentMonth} {currentYear}</div>
                 <div className="month-sub">ciclo activo</div>
               </div>
             </div>
@@ -1092,11 +1821,14 @@ export default function Home() {
                    phase === 'comparativo' ? 'Mes vs Mes' :
                    'Integraciones'}
                 </div>
-                <div className="page-sub">{MONTH} {YEAR}</div>
+                <div className="page-sub">{currentMonth} {currentYear}</div>
               </div>
             </div>
-            <div className="topbar-right">
-              <button className="btn btn-primary btn-sm" onClick={() => showToast('Nuevo ciclo próximamente')}>+ Nuevo mes</button>
+            <div className="topbar-right" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select value={currentMonth} onChange={e => setCurrentMonth(e.target.value)} className="btn btn-sm" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <input type="number" value={currentYear} onChange={e => setCurrentYear(Number(e.target.value))} className="btn btn-sm" style={{ width: '80px', background: 'var(--surface2)', border: '1px solid var(--border)' }} />
             </div>
           </div>
 
@@ -1124,7 +1856,7 @@ export default function Home() {
                   <div style={{display:'flex',flexDirection:'column',gap:16}}>
                     <div className="card">
                       <div className="card-header">
-                        <div><div className="card-title">Estado del mes</div><div className="card-sub">{MONTH} {YEAR}</div></div>
+                        <div><div className="card-title">Estado del mes</div><div className="card-sub">{currentMonth} {currentYear}</div></div>
                       </div>
                       {[
                         ['Briefing mensual', briefingApproved ? 'done' : briefing ? 'active' : 'pending'],
@@ -1192,7 +1924,7 @@ export default function Home() {
 
                 {!briefing && !loading && (
                   <div className="generate-area">
-                    <div className="generate-title">Generar Briefing de {MONTH} {YEAR}</div>
+                    <div className="generate-title">Generar Briefing de {currentMonth} {currentYear}</div>
                     <div className="generate-sub">
                       Claude buscará tendencias del mercado inmobiliario en RD, actividad de la competencia, noticias de MITUR, contenido viral en LATAM y oportunidades para KASA y Arko este mes.
                     </div>
@@ -1213,7 +1945,7 @@ export default function Home() {
                   <div>
                     <div className="card" style={{marginBottom:16}}>
                       <div className="card-header">
-                        <div><div className="card-title">Briefing — {MONTH} {YEAR}</div><div className="card-sub">generado por Claude · sm-1-briefing</div></div>
+                        <div><div className="card-title">Briefing — {currentMonth} {currentYear}</div><div className="card-sub">{briefingApproved ? '✓ Aprobado · guardado en Monday.com' : 'generado por Claude · pendiente de aprobación'}</div></div>
                         <div className="card-actions">
                           <button className="btn btn-sm" onClick={generateBriefing}>Regenerar</button>
                           {!briefingApproved && (
@@ -1224,44 +1956,63 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {briefing.contextoReferencia && (
-                        <div style={{marginBottom:16}}>
-                          <div className="section-label">🧭 Contexto de referencia</div>
-                          <div style={{fontSize:13,lineHeight:1.7,color:'var(--text)'}}>{briefing.contextoReferencia}</div>
+                      {/* Caso: briefing cargado desde Monday como texto plano */}
+                      {typeof briefing.loadedContent === 'string' && briefing.loadedContent.length > 0 && (
+                        <div style={{fontSize:13,lineHeight:1.8,color:'var(--text)',whiteSpace:'pre-wrap',background:'var(--surface2)',padding:'14px 16px',borderRadius:'var(--r-sm)'}}>
+                          {String(briefing.loadedContent)}
                         </div>
                       )}
 
-                      {briefing.actividadCompetencia && (
-                        <div style={{marginBottom:16}}>
-                          <div className="section-label">🏢 Actividad de la competencia</div>
-                          <div style={{fontSize:13,lineHeight:1.7}}>{briefing.actividadCompetencia}</div>
-                        </div>
-                      )}
-
-                      {briefing.tendenciasContenido && (
-                        <div style={{marginBottom:16}}>
-                          <div className="section-label">📈 Tendencias y contenido viral</div>
-                          <div style={{fontSize:13,lineHeight:1.7}}>{briefing.tendenciasContenido}</div>
-                        </div>
-                      )}
-
-                      {briefing.noticiasSector && (
-                        <div style={{marginBottom:16}}>
-                          <div className="section-label">📰 Noticias del sector</div>
-                          <div style={{fontSize:13,lineHeight:1.7}}>{briefing.noticiasSector}</div>
-                        </div>
-                      )}
-
-                      {briefing.insightsClave && Array.isArray(briefing.insightsClave) && (
-                        <div>
-                          <div className="section-label">✅ Insights clave</div>
-                          {briefing.insightsClave.map((insight: string, i: number) => (
-                            <div key={i} style={{display:'flex',gap:10,padding:'8px 12px',background:'var(--surface2)',borderRadius:'var(--r-sm)',marginBottom:7,fontSize:13,lineHeight:1.55}}>
-                              <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)',width:18,flexShrink:0,paddingTop:1}}>{String(i+1).padStart(2,'0')}</span>
-                              <span>{insight}</span>
+                      {/* Caso: briefing estructurado (recién generado) */}
+                      {!briefing.loadedContent && (
+                        <>
+                          {briefing.contextoReferencia && (
+                            <div style={{marginBottom:16}}>
+                              <div className="section-label">🧭 Contexto de referencia</div>
+                              <div style={{fontSize:13,lineHeight:1.7,color:'var(--text)'}}>{briefing.contextoReferencia as string}</div>
                             </div>
-                          ))}
-                        </div>
+                          )}
+
+                          {briefing.desempenoAnuncios && (
+                            <div style={{marginBottom:16}}>
+                              <div className="section-label">📊 Desempeño de anuncios</div>
+                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.desempenoAnuncios as string}</div>
+                            </div>
+                          )}
+
+                          {briefing.actividadCompetencia && (
+                            <div style={{marginBottom:16}}>
+                              <div className="section-label">🏢 Actividad de la competencia</div>
+                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.actividadCompetencia as string}</div>
+                            </div>
+                          )}
+
+                          {briefing.tendenciasContenido && (
+                            <div style={{marginBottom:16}}>
+                              <div className="section-label">📈 Tendencias y contenido viral</div>
+                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.tendenciasContenido as string}</div>
+                            </div>
+                          )}
+
+                          {briefing.noticiasSector && (
+                            <div style={{marginBottom:16}}>
+                              <div className="section-label">📰 Noticias del sector</div>
+                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.noticiasSector as string}</div>
+                            </div>
+                          )}
+
+                          {briefing.insightsClave && Array.isArray(briefing.insightsClave) && (
+                            <div>
+                              <div className="section-label">✅ Insights clave</div>
+                              {(briefing.insightsClave as string[]).map((insight: string, i: number) => (
+                                <div key={i} style={{display:'flex',gap:10,padding:'8px 12px',background:'var(--surface2)',borderRadius:'var(--r-sm)',marginBottom:7,fontSize:13,lineHeight:1.55}}>
+                                  <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)',width:18,flexShrink:0,paddingTop:1}}>{String(i+1).padStart(2,'0')}</span>
+                                  <span>{insight}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -1318,7 +2069,7 @@ export default function Home() {
                 {calendar.length > 0 && !loading && (
                   <div>
                     {calendarApproved ? (
-                      <div className="alert alert-teal">✓ Calendario aprobado — {calendar.length - rejectedPosts.size} posts guardados en Monday.com</div>
+                      <div className="alert alert-teal">✓ Calendario aprobado — {calendar.length - rejectedPosts.size} posts listos para diseño</div>
                     ) : (
                       <div className="alert alert-amber">
                         {approvedPosts.size + rejectedPosts.size === 0
@@ -1330,8 +2081,20 @@ export default function Home() {
                     <div className="card">
                       <div className="card-header">
                         <div>
-                          <div className="card-title">Calendario — {MONTH} {YEAR}</div>
-                          <div className="card-sub">{calendar.length} posts generados</div>
+                          <div className="card-title">Calendario — {currentMonth} {currentYear}</div>
+                          <div className="card-sub">
+                            {(() => {
+                              const filtered = calendar.filter(p => {
+                                if (calFilterBrand && !((p.project ?? '') as string).toLowerCase().includes(calFilterBrand.toLowerCase())) return false
+                                if (calFilterFormat && !((p.format ?? '') as string).toLowerCase().includes(calFilterFormat.toLowerCase())) return false
+                                if (calFilterPlatform && !(p.platforms as string[] ?? []).some((pl: string) => pl.toLowerCase().includes(calFilterPlatform.toLowerCase()))) return false
+                                if (calFilterWeek && p.week !== calFilterWeek) return false
+                                return true
+                              })
+                              const active = calFilterBrand || calFilterFormat || calFilterPlatform || calFilterWeek
+                              return active ? `${filtered.length} de ${calendar.length} posts` : `${calendar.length} posts generados`
+                            })()}
+                          </div>
                         </div>
                         {!calendarApproved && (
                           <div className="card-actions">
@@ -1349,8 +2112,57 @@ export default function Home() {
                         )}
                       </div>
 
+                      {/* Barra de filtros */}
+                      <div style={{display:'flex',gap:8,flexWrap:'wrap' as const,padding:'0 0 14px',borderBottom:'1px solid var(--border)',marginBottom:14}}>
+                        <select value={calFilterBrand} onChange={e => setCalFilterBrand(e.target.value)}
+                          style={{padding:'5px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
+                          <option value="">Todas las marcas</option>
+                          <option value="KASA">KASA</option>
+                          <option value="Arko">Arko</option>
+                          <option value="Aria">Aria</option>
+                          <option value="Noriega">Noriega Group</option>
+                        </select>
+                        <select value={calFilterFormat} onChange={e => setCalFilterFormat(e.target.value)}
+                          style={{padding:'5px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
+                          <option value="">Todos los formatos</option>
+                          <option value="Carousel">Carrusel</option>
+                          <option value="Foto">Foto</option>
+                          <option value="Story">Story</option>
+                          <option value="Reel">Reel</option>
+                          <option value="Lead">Lead Magnet</option>
+                        </select>
+                        <select value={calFilterPlatform} onChange={e => setCalFilterPlatform(e.target.value)}
+                          style={{padding:'5px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
+                          <option value="">Todas las plataformas</option>
+                          <option value="IG">Instagram</option>
+                          <option value="FB">Facebook</option>
+                          <option value="LI">LinkedIn</option>
+                          <option value="GMB">Google My Business</option>
+                        </select>
+                        <select value={calFilterWeek} onChange={e => setCalFilterWeek(Number(e.target.value))}
+                          style={{padding:'5px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
+                          <option value={0}>Todas las semanas</option>
+                          <option value={1}>Semana 1</option>
+                          <option value={2}>Semana 2</option>
+                          <option value={3}>Semana 3</option>
+                          <option value={4}>Semana 4</option>
+                        </select>
+                        {(calFilterBrand || calFilterFormat || calFilterPlatform || calFilterWeek > 0) && (
+                          <button className="btn btn-xs btn-ghost" onClick={() => {
+                            setCalFilterBrand(''); setCalFilterFormat(''); setCalFilterPlatform(''); setCalFilterWeek(0)
+                          }}>✕ Limpiar filtros</button>
+                        )}
+                      </div>
+
                       {[1,2,3,4].map(week => {
-                        const weekPosts = calendar.filter(p => p.week === week)
+                        const weekPosts = calendar.filter(p => {
+                          if (calFilterWeek && p.week !== week) return false
+                          if (!calFilterWeek && p.week !== week) return false
+                          if (calFilterBrand && !((p.project ?? '') as string).toLowerCase().includes(calFilterBrand.toLowerCase())) return false
+                          if (calFilterFormat && !((p.format ?? '') as string).toLowerCase().includes(calFilterFormat.toLowerCase())) return false
+                          if (calFilterPlatform && !(p.platforms as string[] ?? []).some((pl: string) => pl.toLowerCase().includes(calFilterPlatform.toLowerCase()))) return false
+                          return true
+                        })
                         if (!weekPosts.length) return null
                         return (
                           <div key={week}>
@@ -1429,7 +2241,7 @@ export default function Home() {
                           <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
                             <button className="btn btn-sm" onClick={generateCalendar}>Regenerar</button>
                             <button className="btn btn-success" onClick={approveCalendar}>
-                              ✓ Aprobar calendario y subir a Monday.com →
+                              ✓ Aprobar calendario →
                             </button>
                           </div>
                         </>
@@ -1458,7 +2270,7 @@ export default function Home() {
                       <div><div className="card-title">Fase 3 — Imágenes Automáticas</div><div className="card-sub">Sube tus fotos → Vision selecciona → Render → Revisión</div></div>
                     </div>
                     <div className="alert alert-amber" style={{marginBottom:16}}>
-                      Sube las fotos y renders disponibles. Claude descartará las que no necesite y asignará las mejores al calendario. Lo que falte se genera con IA automáticamente.
+                      Sube las fotos y renders disponibles. Claude descartará las que no necesite y asignará las mejores al calendario. <strong>Si no subes imágenes y das clic en Iniciar, TODO el mes se generará con IA hiperrealista.</strong>
                     </div>
                     <div style={{marginBottom:16}}>
                       <div style={{fontSize:11,color:'var(--text3)',marginBottom:6}}>SUBIR IMÁGENES</div>
@@ -1482,16 +2294,53 @@ export default function Home() {
                         </div>
                       )}
                     </div>
+                    {/* Google Drive scan */}
+                    <div style={{marginBottom:16,padding:14,background:'var(--surface2)',borderRadius:'var(--r-sm)',border:'1px solid var(--border)'}}>
+                      <div style={{fontSize:11,color:'var(--text3)',marginBottom:8,letterSpacing:'.06em',fontWeight:600}}>FUENTE ALTERNATIVA — GOOGLE DRIVE</div>
+                      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap' as const}}>
+                        <button className="btn btn-sm" onClick={scanGoogleDrive}
+                          disabled={driveScanStatus === 'scanning'}>
+                          {driveScanStatus === 'scanning' ? '⏳ Escaneando...' : '📂 Escanear Google Drive'}
+                        </button>
+                        {driveScanStatus === 'done' && driveImages.length > 0 && (
+                          <>
+                            <span style={{fontSize:12,color:'var(--teal)'}}>✓ {driveImages.length} imágenes encontradas</span>
+                            <button className="btn btn-sm btn-primary" onClick={runFase3WithDrive}>
+                              Usar imágenes de Drive →
+                            </button>
+                          </>
+                        )}
+                        {driveScanStatus === 'error' && (
+                          <span style={{fontSize:12,color:'var(--red)'}}>Error al conectar con Drive — revisa la variable GOOGLE_SERVICE_ACCOUNT_JSON</span>
+                        )}
+                      </div>
+                    </div>
+
                     <div style={{display:'flex',gap:8}}>
                       <button className="btn btn-primary" onClick={runFase3} disabled={!calendar.length}>
-                        ⚡ Iniciar pipeline de imágenes
+                        ⚡ Iniciar con imágenes locales
                       </button>
                       <button className="btn btn-sm" onClick={() => navTo('fase4')}>Saltar →</button>
+                    </div>
+
+                    {/* ── MODO IA COMPLETO ── */}
+                    <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid var(--border)'}}>
+                      <div style={{fontSize:11,color:'var(--text3)',letterSpacing:'.06em',fontWeight:600,marginBottom:6}}>MODO IA COMPLETO — SIN SUBIR IMÁGENES</div>
+                      <div style={{fontSize:12,color:'var(--text)',lineHeight:1.6,marginBottom:12}}>
+                        Claude genera un prompt creativo para cada post del calendario, Higgsfield crea la imagen o video con estilo fotorrealista, y se aplica el brand overlay automáticamente. Tú solo apruebas o rechazas antes de enviar a GHL.
+                      </div>
+                      <button className="btn btn-primary" onClick={generateAIMedia} disabled={!calendarApproved}
+                        style={{background:'linear-gradient(135deg,var(--purple),var(--accent,#952a95))'}}>
+                        Generar todo con IA (Claude + Higgsfield) →
+                      </button>
+                      {!calendarApproved && (
+                        <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Requiere calendario aprobado en Fase 2</div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {/* LOADING */}
+                {/* LOADING — drive flow */}
                 {['scanning','assigning','rendering'].includes(fase3Step) && (
                   <div className="card" style={{textAlign:'center',padding:40}}>
                     <div className="spinner" style={{margin:'0 auto 16px'}}/>
@@ -1501,6 +2350,96 @@ export default function Home() {
                       {fase3Step === 'assigning' && '👁 Claude Vision analizando imágenes...'}
                       {fase3Step === 'rendering' && '🎨 Aplicando marca + generando con IA...'}
                     </div>
+                  </div>
+                )}
+
+                {/* LOADING — IA flow */}
+                {fase3Step === 'ai_generating' && (
+                  <div className="card" style={{textAlign:'center',padding:40}}>
+                    <div className="spinner" style={{margin:'0 auto 16px'}}/>
+                    <div style={{fontSize:14,fontWeight:600,marginBottom:8}}>{loadingText}</div>
+                    <div style={{fontSize:12,color:'var(--text3)',lineHeight:1.7}}>
+                      Claude escribe los prompts · Higgsfield genera las imágenes/videos · se aplica el estilo de marca<br/>
+                      Las imágenes tardan ~1–2 min, los videos 2–5 min cada uno
+                    </div>
+                  </div>
+                )}
+
+                {/* BANDEJA DE CONFIRMACIÓN DE ORDEN */}
+                {fase3Step === 'confirm_assignment' && assignedPosts.length > 0 && (
+                  <div>
+                    <div className="alert alert-teal" style={{marginBottom:16}}>
+                      Claude ha asignado las imágenes. Revisa y confirma el orden de los carruseles antes de aplicar la marca de agua.
+                    </div>
+                    {assignedPosts.map((post: any) => (
+                      <div key={post.postId} className="card" style={{marginBottom: 16}}>
+                        <div className="card-header">
+                          <div>
+                            <div className="card-title">{post.postName}</div>
+                            <div className="card-sub">{post.format} · {post.project}</div>
+                          </div>
+                          {post.needsAI && <span style={{fontSize: 11, color: 'var(--purple)', background: 'var(--surface2)', padding: '4px 8px', borderRadius: 4}}>🤖 Se generará con IA</span>}
+                        </div>
+                        
+                        {post.slides && post.slides.length > 0 && (
+                          <div style={{display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0'}}>
+                            {post.slides.map((slide: any, idx: number) => (
+                              <div key={idx} style={{display: 'flex', flexDirection: 'column', gap: 4, width: 120, flexShrink: 0}}>
+                                <img src={slide.thumbnail} alt={`Slide ${idx+1}`} style={{width: 120, height: 120, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)'}}/>
+                                <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 10}}>
+                                  <button disabled={idx === 0} onClick={() => moveSlide(post.postId, idx, idx - 1)} className="btn btn-xs btn-ghost" style={{padding: '2px 6px'}}>◀</button>
+                                  <span style={{color: 'var(--text3)', alignSelf: 'center'}}>{idx + 1}</span>
+                                  <button disabled={idx === post.slides.length - 1} onClick={() => moveSlide(post.postId, idx, idx + 1)} className="btn btn-xs btn-ghost" style={{padding: '2px 6px'}}>▶</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {post.image && !post.slides && (
+                          <div style={{padding: '8px 0'}}>
+                            <img src={post.image.thumbnail} alt="Post image" style={{width: 120, height: 120, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)'}}/>
+                          </div>
+                        )}
+
+                        {/* ── Texto sobre la imagen ── */}
+                        <div style={{marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6}}>
+                          <div style={{fontSize: 10, color: 'var(--text3)', letterSpacing: '.06em', fontWeight: 600}}>TEXTO EN LA IMAGEN</div>
+                          <div style={{display: 'flex', gap: 8, flexWrap: 'wrap' as const}}>
+                            <div style={{flex: 1, minWidth: 180}}>
+                              <div style={{fontSize: 10, color: 'var(--text3)', marginBottom: 3}}>TÍTULO (headline)</div>
+                              <input
+                                type="text"
+                                placeholder={post.postName}
+                                defaultValue={postTextOverrides[post.postId]?.title ?? ''}
+                                onChange={e => setPostTextOverrides(prev => ({
+                                  ...prev,
+                                  [post.postId]: { ...prev[post.postId], title: e.target.value }
+                                }))}
+                                style={{width: '100%', padding: '6px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, boxSizing: 'border-box' as const}}
+                              />
+                            </div>
+                            <div style={{flex: 1, minWidth: 180}}>
+                              <div style={{fontSize: 10, color: 'var(--text3)', marginBottom: 3}}>SUBTÍTULO / DESCRIPCIÓN</div>
+                              <input
+                                type="text"
+                                placeholder={post.contentDirection?.slice(0, 60) ?? 'Subtítulo opcional'}
+                                defaultValue={postTextOverrides[post.postId]?.body ?? ''}
+                                onChange={e => setPostTextOverrides(prev => ({
+                                  ...prev,
+                                  [post.postId]: { ...prev[post.postId], body: e.target.value }
+                                }))}
+                                style={{width: '100%', padding: '6px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, boxSizing: 'border-box' as const}}
+                              />
+                            </div>
+                          </div>
+                          <div style={{fontSize: 10, color: 'var(--text3)'}}>Dejar en blanco para usar el nombre y dirección del post generados por IA</div>
+                        </div>
+                      </div>
+                    ))}
+                    <button className="btn btn-primary" onClick={confirmAndRender} style={{width: '100%', padding: '14px', fontSize: 14, marginTop: 4}}>
+                      ✓ Confirmar orden y Aplicar marca →
+                    </button>
                   </div>
                 )}
 
@@ -1542,9 +2481,94 @@ export default function Home() {
                                 <img key={i} src={t} alt={`Slide ${i+1}`}
                                   style={{width:120,height:120,objectFit:'cover',borderRadius:6,flexShrink:0,border:'1px solid var(--border)'}}/>
                               ))
-                            : post.imageThumbnail && (
-                                <img src={post.imageThumbnail} alt="Preview"
-                                  style={{width:120,height:120,objectFit:'cover',borderRadius:6,border:'1px solid var(--border)'}}/>
+                            : post.videoUrl ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 200 }}>
+                                  <video
+                                    src={post.videoUrl} controls
+                                    style={{height:140,borderRadius:6,border:'1px solid var(--border)',backgroundColor:'#000',cursor:'pointer'}}
+                                    onClick={() => setPreviewMedia({ url: post.videoUrl, type: 'video/mp4' })}
+                                  />
+                                  {videoGenStatus[post.postId] === 'generating' ? (
+                                    <div style={{background:'var(--surface2)',borderRadius:6,padding:'10px 12px',border:'1px solid var(--border)'}}>
+                                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                                        <div className="spinner" style={{width:14,height:14,borderWidth:2,flexShrink:0}}/>
+                                        <span style={{fontSize:11,fontWeight:600,color:'var(--text)'}}>Generando video de marca...</span>
+                                      </div>
+                                      <div style={{fontSize:10,color:'var(--text3)'}}>Higgsfield tarda 2–5 min. Puedes seguir revisando otros posts.</div>
+                                    </div>
+                                  ) : videoGenStatus[post.postId] === 'done' ? (
+                                    <div style={{fontSize:11,color:'var(--teal)',fontWeight:600,padding:'6px 0'}}>✓ Video de marca generado</div>
+                                  ) : videoGenStatus[post.postId] === 'error' ? (
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{background:'var(--danger)',color:'#fff',border:'none',fontSize:'11px'}}
+                                      onClick={async () => {
+                                        setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'generating' }))
+                                        try {
+                                          const res = await fetch('/api/mcp-edit', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ videoUrl: post.videoUrl, postName: post.postName, contentDirection: post.contentDirection, project: post.project })
+                                          })
+                                          const data = await res.json()
+                                          if (!res.ok) throw new Error(data.error)
+                                          setRenderedPosts(prev => prev.map(p => String(p.postId) === String(post.postId) ? { ...p, videoUrl: data.editedVideoUrl } : p))
+                                          setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'done' }))
+                                          showToast('✓ Video regenerado')
+                                        } catch(err) {
+                                          setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'error' }))
+                                          showToast('Error: ' + String(err))
+                                        }
+                                      }}
+                                    >↻ Reintentar</button>
+                                  ) : (
+                                    <button
+                                      className="btn btn-sm"
+                                      style={{background:'var(--purple)', color:'#fff', border:'none', fontSize:'11px'}}
+                                      onClick={async () => {
+                                        setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'generating' }))
+                                        try {
+                                          const res = await fetch('/api/mcp-edit', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ videoUrl: post.videoUrl, postName: post.postName, contentDirection: post.contentDirection, project: post.project })
+                                          })
+                                          const data = await res.json()
+                                          if (!res.ok) throw new Error(data.error || 'Error en edición')
+                                          setRenderedPosts(prev => prev.map(p => String(p.postId) === String(post.postId) ? { ...p, videoUrl: data.editedVideoUrl } : p))
+                                          setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'done' }))
+                                          showToast('✓ Video de marca listo')
+                                        } catch(err) {
+                                          setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'error' }))
+                                          showToast('Error: ' + String(err))
+                                        }
+                                      }}
+                                    >
+                                      ✨ Generar video de marca
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            : (post.imageUrl || post.imageThumbnail) && (
+                                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                                  {/* Imagen renderizada con marca (resultado real) */}
+                                  <img
+                                    src={post.imageUrl || post.imageThumbnail}
+                                    alt="Render con marca"
+                                    title="Clic para ver a tamaño completo"
+                                    onClick={() => setPreviewMedia({ url: post.imageUrl || post.imageThumbnail, type: 'image/jpeg' })}
+                                    style={{width:160,height:160,objectFit:'cover',borderRadius:6,border:'2px solid var(--teal)',cursor:'pointer',flexShrink:0}}
+                                  />
+                                  <div style={{fontSize:10,color:'var(--teal)',textAlign:'center'}}>✓ Con marca — clic p/ampliar</div>
+                                  {/* Miniatura original como referencia */}
+                                  {post.imageThumbnail && post.imageUrl && (
+                                    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
+                                      <img src={post.imageThumbnail} alt="Original"
+                                        style={{width:48,height:48,objectFit:'cover',borderRadius:4,border:'1px solid var(--border)',flexShrink:0}}/>
+                                      <span style={{fontSize:10,color:'var(--text3)'}}>original</span>
+                                    </div>
+                                  )}
+                                </div>
                               )
                           }
                         </div>
@@ -1592,6 +2616,168 @@ export default function Home() {
                     </button>
                   </div>
                 )}
+
+                {/* ── REVISIÓN IA: aprueba/rechaza/regenera cada imagen o video ── */}
+                {fase3Step === 'ai_review' && aiMediaItems.length > 0 && (
+                  <div>
+                    <div className="alert alert-teal" style={{marginBottom:16}}>
+                      <strong>{aiMediaItems.length} medios generados</strong> — aprueba o rechaza cada uno.
+                      Los aprobados se subirán a GHL y pasarán a Fase 4.
+                      {aiMediaErrors.length > 0 && (
+                        <span style={{color:'var(--red)',marginLeft:8}}>· {aiMediaErrors.length} errores de generación</span>
+                      )}
+                    </div>
+
+                    {/* Errores de generación */}
+                    {aiMediaErrors.length > 0 && (
+                      <div style={{marginBottom:12}}>
+                        {aiMediaErrors.map((e: any, i: number) => (
+                          <div key={i} style={{fontSize:11,color:'var(--red)',padding:'6px 10px',background:'rgba(239,68,68,.08)',borderRadius:4,marginBottom:4}}>
+                            ✕ {e.postName}: {e.error}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Grid de tarjetas de aprobación */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:16}}>
+                      {aiMediaItems.map((item: any) => {
+                        const status: string = (aiMediaApproval[item.postId] as string | undefined) ?? 'pending'
+                        const isRegen  = aiMediaRegen.has(item.postId)
+                        const borderColor = status === 'approved' ? 'var(--teal)' : status === 'rejected' ? 'var(--red,#ef4444)' : 'var(--border)'
+                        const borderWidth = status !== 'pending' ? '2px' : '1px'
+                        return (
+                          <div key={item.postId} className="card" style={{padding:12,border:`${borderWidth} solid ${borderColor}`,position:'relative'}}>
+                            {/* Badge de estado */}
+                            {status !== 'pending' && (
+                              <div style={{position:'absolute',top:8,right:8,fontSize:10,fontWeight:700,
+                                color: status === 'approved' ? 'var(--teal)' : 'var(--red,#ef4444)',
+                                background:'var(--surface)',padding:'2px 6px',borderRadius:20,border:`1px solid ${borderColor}`}}>
+                                {status === 'approved' ? '✓ ACEPTADO' : '✕ RECHAZADO'}
+                              </div>
+                            )}
+
+                            {/* Preview */}
+                            <div style={{marginBottom:10,borderRadius:6,overflow:'hidden',background:'#000',aspectRatio:'1/1',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                              {isRegen ? (
+                                <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:8,color:'var(--text3)'}}>
+                                  <div className="spinner"/>
+                                  <span style={{fontSize:11}}>Regenerando...</span>
+                                </div>
+                              ) : item.mediaType === 'video' ? (
+                                <video src={item.dataUrl} controls
+                                  style={{width:'100%',height:'100%',objectFit:'cover',cursor:'pointer'}}
+                                  onClick={() => setPreviewMedia({url: item.dataUrl, type:'video/mp4'})}/>
+                              ) : item.isCarousel && item.slides?.length > 1 ? (
+                                // Carrusel: slideshow con navegación prev/next
+                                <div style={{width:'100%',height:'100%',position:'relative'}}>
+                                  <img
+                                    src={item.slides[carouselSlideIdx[item.postId] ?? 0]}
+                                    alt={`slide ${(carouselSlideIdx[item.postId] ?? 0) + 1}`}
+                                    style={{width:'100%',height:'100%',objectFit:'cover',cursor:'pointer'}}
+                                    onClick={() => setPreviewMedia({url: item.slides[carouselSlideIdx[item.postId] ?? 0], type:'image/jpeg'})}
+                                  />
+                                  {(carouselSlideIdx[item.postId] ?? 0) > 0 && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setCarouselSlideIdx(p => ({...p, [item.postId]: (p[item.postId]??0)-1})) }}
+                                      style={{position:'absolute',left:4,top:'50%',transform:'translateY(-50%)',background:'rgba(0,0,0,.65)',color:'#fff',border:'none',borderRadius:'50%',width:28,height:28,cursor:'pointer',fontSize:18,lineHeight:'1',padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>‹</button>
+                                  )}
+                                  {(carouselSlideIdx[item.postId] ?? 0) < item.slides.length - 1 && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setCarouselSlideIdx(p => ({...p, [item.postId]: (p[item.postId]??0)+1})) }}
+                                      style={{position:'absolute',right:4,top:'50%',transform:'translateY(-50%)',background:'rgba(0,0,0,.65)',color:'#fff',border:'none',borderRadius:'50%',width:28,height:28,cursor:'pointer',fontSize:18,lineHeight:'1',padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>›</button>
+                                  )}
+                                  <div style={{position:'absolute',bottom:6,right:6,background:'rgba(0,0,0,.65)',color:'#fff',fontSize:10,fontWeight:700,padding:'2px 7px',borderRadius:10}}>
+                                    {(carouselSlideIdx[item.postId] ?? 0) + 1}/{item.slides.length}
+                                  </div>
+                                  <div style={{position:'absolute',bottom:6,left:0,right:0,display:'flex',justifyContent:'center',gap:4,paddingRight:48}}>
+                                    {(item.slides as string[]).map((_: string, dotIdx: number) => (
+                                      <button key={dotIdx}
+                                        onClick={(e) => { e.stopPropagation(); setCarouselSlideIdx(p => ({...p, [item.postId]: dotIdx})) }}
+                                        style={{width:6,height:6,borderRadius:'50%',border:'none',cursor:'pointer',padding:0,
+                                          background: dotIdx === (carouselSlideIdx[item.postId] ?? 0) ? '#fff' : 'rgba(255,255,255,.45)'}}/>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <img src={item.dataUrl} alt={item.postName}
+                                  onClick={() => setPreviewMedia({url: item.dataUrl, type:'image/jpeg'})}
+                                  style={{width:'100%',height:'100%',objectFit:'cover',cursor:'pointer'}}
+                                  title="Clic para ampliar"/>
+                              )}
+                            </div>
+
+                            {/* Info */}
+                            <div style={{fontSize:12,fontWeight:600,marginBottom:2,lineHeight:1.3}}>{item.postName}</div>
+                            <div style={{fontSize:10,color:'var(--text3)',marginBottom:8}}>
+                              {item.format} · {item.brand} · Semana {item.week} · {item.suggestedDay}
+                            </div>
+
+                            {/* Prompt generado por Claude */}
+                            <div style={{fontSize:9,color:'var(--text3)',background:'var(--surface2)',padding:'5px 7px',borderRadius:4,marginBottom:10,lineHeight:1.5,fontStyle:'italic'}}>
+                              "{item.prompt.slice(0, 130)}{item.prompt.length > 130 ? '...' : ''}"
+                            </div>
+
+                            {/* Acciones */}
+                            <div style={{display:'flex',gap:6}}>
+                              <button
+                                onClick={() => setAiMediaApproval(prev => ({...prev, [item.postId]: 'approved'}))}
+                                disabled={isRegen}
+                                style={{flex:1,padding:'6px 0',fontSize:11,fontWeight:600,borderRadius:4,cursor:'pointer',border:'none',
+                                  background: status === 'approved' ? 'var(--teal)' : 'var(--surface2)',
+                                  color: status === 'approved' ? '#000' : 'var(--text)'}}>
+                                ✓ Aceptar
+                              </button>
+                              <button
+                                onClick={() => setAiMediaApproval(prev => ({...prev, [item.postId]: 'rejected'}))}
+                                disabled={isRegen}
+                                style={{flex:1,padding:'6px 0',fontSize:11,fontWeight:600,borderRadius:4,cursor:'pointer',border:'none',
+                                  background: status === 'rejected' ? '#ef4444' : 'var(--surface2)',
+                                  color: status === 'rejected' ? '#fff' : 'var(--text)'}}>
+                                ✕ Rechazar
+                              </button>
+                              <button
+                                onClick={() => regenerateOneAIMedia(item)}
+                                disabled={isRegen}
+                                title="Regenerar con Higgsfield"
+                                style={{padding:'6px 10px',fontSize:13,borderRadius:4,cursor:'pointer',border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text)'}}>
+                                ↻
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Barra de resumen y envío */}
+                    <div style={{background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:'var(--r-sm)',padding:'14px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap' as const,gap:12}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>
+                          <span style={{color:'var(--teal)'}}>✓ {Object.values(aiMediaApproval).filter(v => v === 'approved').length} aceptados</span>
+                          {' · '}
+                          <span style={{color:'var(--red,#ef4444)'}}>✕ {Object.values(aiMediaApproval).filter(v => v === 'rejected').length} rechazados</span>
+                          {' · '}
+                          <span style={{color:'var(--text3)'}}>{aiMediaItems.length - Object.keys(aiMediaApproval).length} pendientes (se incluirán)</span>
+                        </div>
+                        <div style={{fontSize:11,color:'var(--text3)'}}>Los items pendientes se consideran aceptados al enviar a GHL</div>
+                      </div>
+                      <div style={{display:'flex',gap:8}}>
+                        <button className="btn btn-sm" onClick={() => {
+                          cleanupHiggsfield(sessionHiggsfieldJobIds)
+                          setAiMediaItems([])
+                          setAiMediaApproval({})
+                          setFase3Step('idle')
+                        }}>← Volver</button>
+                        <button
+                          className="btn btn-success"
+                          onClick={approveAIMedia}
+                          disabled={loading || aiMediaItems.filter(m => aiMediaApproval[m.postId] !== 'rejected').length === 0}>
+                          {loading ? 'Procesando diseños...' : `✓ Aprobar ${aiMediaItems.filter(m => aiMediaApproval[m.postId] !== 'rejected').length} diseños → Copy`}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1608,7 +2794,7 @@ export default function Home() {
                     <div className="generate-area">
                       <div className="generate-title">Generar Copy por Plataforma</div>
                       <div className="generate-sub">
-                        Claude redactará el copy para cada post adaptado a Instagram, Facebook, LinkedIn y Google My Business — con el tono y voz de Noriega Group.
+                    Claude redactará el copy para cada post en <strong>inglés</strong>, adaptado a Instagram, Facebook, LinkedIn y Google My Business.
                       </div>
                       <button className="btn btn-primary" onClick={generateCopy} disabled={!calendarApproved}>
                         Generar Copy con Claude
@@ -1634,7 +2820,7 @@ export default function Home() {
 
                     <div className="card">
                       <div className="card-header">
-                        <div><div className="card-title">Copy por post — {MONTH} {YEAR}</div><div className="card-sub">{copyData.length} posts</div></div>
+                        <div><div className="card-title">Copy por post — {currentMonth} {currentYear}</div><div className="card-sub">{copyData.length} posts</div></div>
                         {!copyApproved && (
                           <button className="btn btn-success btn-sm" onClick={approveCopy}>Aprobar todo →</button>
                         )}
@@ -1666,30 +2852,54 @@ export default function Home() {
                               
                               {/* TEXTOS POR RED SOCIAL */}
                               <div style={{ flexGrow: 1 }}>
-                                {item.copyIG && (
-                                  <div className="copy-platform">
-                                    <div className="copy-platform-label">Instagram</div>
-                                    <div className="copy-text">{item.copyIG}</div>
-                                  </div>
-                                )}
-                                {item.copyFB && (
-                                  <div className="copy-platform">
-                                    <div className="copy-platform-label">Facebook</div>
-                                    <div className="copy-text">{item.copyFB}</div>
-                                  </div>
-                                )}
-                                {item.copyLI && (
-                                  <div className="copy-platform">
-                                    <div className="copy-platform-label">LinkedIn</div>
-                                    <div className="copy-text">{item.copyLI}</div>
-                                  </div>
-                                )}
-                                {item.copyGMB && (
-                                  <div className="copy-platform">
-                                    <div className="copy-platform-label">Google My Business</div>
-                                    <div className="copy-text">{item.copyGMB}</div>
-                                  </div>
-                                )}
+                                {([
+                                  { platform: 'IG',  label: 'Instagram',            copy: item.copyIG  },
+                                  { platform: 'FB',  label: 'Facebook',             copy: item.copyFB  },
+                                  { platform: 'LI',  label: 'LinkedIn',             copy: item.copyLI  },
+                                  { platform: 'GMB', label: 'Google My Business',   copy: item.copyGMB },
+                                ] as { platform: string; label: string; copy: string|undefined }[])
+                                  .filter(p => !!p.copy)
+                                  .map(({ platform, label, copy }) => {
+                                    const eKey = `${item.postId}_${platform}`
+                                    return (
+                                      <div key={platform} className="copy-platform">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                          <div className="copy-platform-label">{label}</div>
+                                          <button
+                                            onClick={() => setCopyEditOpen(prev => ({ ...prev, [eKey]: !prev[eKey] }))}
+                                            style={{ fontSize: 11, padding: '2px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text3)', cursor: 'pointer' }}
+                                          >
+                                            {copyEditOpen[eKey] ? 'Cancelar' : '✏ Editar'}
+                                          </button>
+                                        </div>
+                                        <div className="copy-text">{copy}</div>
+                                        {copyEditOpen[eKey] && (
+                                          <div style={{ marginTop: 8, padding: 10, background: 'var(--surface2)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                                            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>Instrucción para Claude:</div>
+                                            <textarea rows={2}
+                                              placeholder='Ej: "Hazlo más corto", "enfócate en el ROI", "agrega un emoji de casa"...'
+                                              value={copyEditInstr[eKey] ?? ''}
+                                              onChange={e => setCopyEditInstr(prev => ({ ...prev, [eKey]: e.target.value }))}
+                                              style={{ width: '100%', padding: '6px 8px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text)', fontSize: 12, resize: 'vertical' as const, boxSizing: 'border-box' as const }}
+                                            />
+                                            <button
+                                              disabled={!copyEditInstr[eKey]?.trim() || !!copyEditLoading[eKey]}
+                                              onClick={() => editCopyWithClaude(
+                                                item.postId!, platform, copy!,
+                                                copyEditInstr[eKey] ?? '',
+                                                item.postName ?? '', ''
+                                              )}
+                                              className="btn btn-primary btn-sm"
+                                              style={{ marginTop: 6 }}
+                                            >
+                                              {copyEditLoading[eKey] ? 'Editando...' : '→ Aplicar'}
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })
+                                }
                               </div>
                             </div>
                           )}
@@ -1723,7 +2933,7 @@ export default function Home() {
               <div>
                 {ghlDone && (
                   <div className="alert alert-teal">
-                    🎉 ¡{MONTH} {YEAR} completamente programado en GHL! El agente ha completado las 5 fases.
+                    🎉 ¡{currentMonth} {currentYear} completamente programado en GHL! El agente ha completado las 5 fases.
                   </div>
                 )}
 
@@ -1758,7 +2968,7 @@ export default function Home() {
                     <div>
                       <div className="card">
                         <div className="card-header">
-                          <div><div className="card-title">Horarios propuestos</div><div className="card-sub">{schedule.length} posts · {MONTH} {YEAR}</div></div>
+                          <div><div className="card-title">Horarios propuestos</div><div className="card-sub">{schedule.length} posts · {currentMonth} {currentYear}</div></div>
                         </div>
 
                         <div style={{marginBottom:8,display:'grid',gridTemplateColumns:'65px 58px 1fr auto',gap:10,fontSize:10,fontFamily:'var(--mono)',color:'var(--text3)',padding:'0 0 8px',borderBottom:'1px solid var(--border)'}}>
@@ -1832,7 +3042,7 @@ export default function Home() {
                         {ghlDone && (
                           <div style={{textAlign:'center',padding:'20px 0'}}>
                             <div style={{fontSize:32,marginBottom:8}}>✅</div>
-                            <div style={{fontSize:15,fontWeight:500,marginBottom:6}}>{MONTH} programado</div>
+                            <div style={{fontSize:15,fontWeight:500,marginBottom:6}}>{currentMonth} programado</div>
                             <div style={{fontSize:12,color:'var(--text3)',fontFamily:'var(--mono)'}}>{schedule.length} posts en GHL</div>
                             <button className="btn btn-sm" style={{marginTop:14}} onClick={() => navTo('dashboard')}>
                               Volver al dashboard →
@@ -1853,10 +3063,26 @@ export default function Home() {
                   <div className="generate-area">
                     <div className="generate-title">Reporte de Desempeño</div>
                     <div className="generate-sub">
-                      Claude analizará los datos de Monday.com y GHL para generar un reporte completo del mes con insights y recomendaciones.
+                      Claude Sonnet analiza Monday.com + GHL y genera un reporte ejecutivo completo con gráficos, insights, mejoras y próximos pasos.
+                    </div>
+                    <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap' as const,marginBottom:12}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:12,color:'var(--text3)'}}>Mes:</span>
+                        <select
+                          value={currentMonth}
+                          onChange={e => setCurrentMonth(e.target.value)}
+                          style={{fontSize:13,padding:'4px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)'}}>
+                          {['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'].map(m => (
+                            <option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number" value={currentYear} onChange={e => setCurrentYear(Number(e.target.value))}
+                          style={{width:70,fontSize:13,padding:'4px 8px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text)'}} />
+                      </div>
                     </div>
                     <button className="btn btn-primary" onClick={loadReport}>
-                      Generar Reporte con Claude
+                      Generar Reporte Completo
                     </button>
                   </div>
                 )}
@@ -1864,60 +3090,17 @@ export default function Home() {
                 {loading && (
                   <div className="loading-state">
                     <div className="spinner"/>
-                    <div className="loading-text">{loadingText}</div>
+                    <div className="loading-text">{loadingText || 'Claude Sonnet analizando datos de Monday.com y GHL...'}</div>
                   </div>
                 )}
 
                 {report && !loading && (
                   <div>
-                    <div className="card" style={{marginBottom:16}}>
-                      <div className="card-header">
-                        <div><div className="card-title">Reporte — {report.month} {report.year}</div></div>
-                    <button className="btn btn-sm btn-primary" onClick={exportToPDF}>Descargar PDF</button>
-                      </div>
-
-                  {/* Wrapper para el PDF con fondo blanco */}
-                  <div id="report-wrapper" style={{background: '#ffffff', padding: '24px', borderRadius: '8px', color: '#1a1a1a'}}>
-                    <h3 style={{marginBottom: 20, fontSize: 18, borderBottom: '2px solid #eaeaea', paddingBottom: 10}}>
-                      Reporte de Resultados: Noriega Group
-                    </h3>
-                    <div className="grid-4" style={{marginBottom:16}}>
-                        <div className="metric"><div className="metric-label">total posts</div><div className="metric-val">{report.totalPosts || 0}</div></div>
-                        <div className="metric"><div className="metric-label">programados</div><div className="metric-val">{report.scheduled || 0}</div></div>
-                        <div className="metric"><div className="metric-label">plataformas</div><div className="metric-val">4</div></div>
-                        <div className="metric"><div className="metric-label">lead magnets</div><div className="metric-val">{report.byFormat?.['Lead Magnet'] || 0}</div></div>
-                      </div>
-
-                      {report.summary && (
-                        <div style={{fontSize:13,lineHeight:1.7,color:'var(--text)',marginBottom:16,padding:'12px 14px',background:'var(--surface2)',borderRadius:'var(--r-sm)'}}>
-                          {report.summary}
-                        </div>
-                      )}
-
-                      {!!report.insights && report.insights.length > 0 && (
-                        <div style={{marginBottom:16}}>
-                          <div className="section-label">Insights</div>
-                          {report.insights.map((ins, i) => (
-                            <div key={i} style={{display:'flex',gap:8,padding:'6px 0',fontSize:13,lineHeight:1.55,borderBottom:'1px solid var(--border)'}}>
-                              <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--text3)',width:18,flexShrink:0,paddingTop:2}}>{i+1}</span>
-                              {ins}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {!!report.recommendations && report.recommendations.length > 0 && (
-                        <div>
-                          <div className="section-label">Recomendaciones para el próximo mes</div>
-                          {report.recommendations.map((rec, i) => (
-                            <div key={i} style={{display:'flex',gap:8,padding:'6px 0',fontSize:13,lineHeight:1.55,borderBottom:'1px solid var(--border)'}}>
-                              <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--teal)',width:18,flexShrink:0,paddingTop:2}}>→</span>
-                              {rec}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                  </div>
+                    <ReportView report={report} />
+                    <div style={{textAlign:'center',marginTop:12}}>
+                      <button className="btn btn-sm" onClick={() => setReport(null)} style={{marginRight:8}}>
+                        ↺ Regenerar
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1926,15 +3109,175 @@ export default function Home() {
 
             {/* === COMPARATIVO === */}
             {phase === 'comparativo' && (
-              <div className="card">
-                <div className="card-header">
-                  <div><div className="card-title">Comparativo mensual</div><div className="card-sub">se llena automáticamente con datos reales de múltiples meses</div></div>
+              <div>
+                {/* Selector de meses */}
+                <div className="card" style={{marginBottom:16}}>
+                  <div className="card-header">
+                    <div><div className="card-title">Comparativo mensual</div><div className="card-sub">Compara dos meses usando datos reales de Monday.com</div></div>
+                  </div>
+                  <div style={{display:'flex',gap:16,flexWrap:'wrap' as const,alignItems:'flex-end',marginBottom:16}}>
+                    <div>
+                      <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,letterSpacing:'.06em'}}>MES BASE</div>
+                      <div style={{display:'flex',gap:8}}>
+                        <select value={compareMonth1} onChange={e => setCompareMonth1(e.target.value)}
+                          style={{padding:'6px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
+                          {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <input type="number" value={compareYear1} onChange={e => setCompareYear1(Number(e.target.value))} min={2024} max={2030}
+                          style={{width:70,padding:'6px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}/>
+                      </div>
+                    </div>
+                    <div style={{color:'var(--text3)',fontSize:20,alignSelf:'center'}}>→</div>
+                    <div>
+                      <div style={{fontSize:10,color:'var(--text3)',marginBottom:6,letterSpacing:'.06em'}}>MES COMPARADO</div>
+                      <div style={{display:'flex',gap:8}}>
+                        <select value={compareMonth2} onChange={e => setCompareMonth2(e.target.value)}
+                          style={{padding:'6px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
+                          {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <input type="number" value={compareYear2} onChange={e => setCompareYear2(Number(e.target.value))} min={2024} max={2030}
+                          style={{width:70,padding:'6px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}/>
+                      </div>
+                    </div>
+                    <button className="btn btn-primary" disabled={compareLoading}
+                      onClick={async () => {
+                        setCompareLoading(true)
+                        setCompareData(null)
+                        try {
+                          const res = await fetch(`/api/compare?month1=${compareMonth1}&year1=${compareYear1}&month2=${compareMonth2}&year2=${compareYear2}`)
+                          const data = await res.json()
+                          if (!res.ok) throw new Error(data.error)
+                          setCompareData(data)
+                        } catch (e) {
+                          showToast('Error: ' + String(e))
+                        } finally {
+                          setCompareLoading(false)
+                        }
+                      }}>
+                      {compareLoading ? '⏳ Comparando...' : '📊 Comparar'}
+                    </button>
+                  </div>
                 </div>
-                <div style={{padding:'40px 20px',textAlign:'center',color:'var(--text3)'}}>
-                  <div style={{fontSize:32,marginBottom:12}}>📊</div>
-                  <div style={{fontSize:14,fontWeight:500,marginBottom:8}}>Datos insuficientes</div>
-                  <div style={{fontSize:13,lineHeight:1.6}}>Este reporte se construirá automáticamente cuando tengas 2+ meses de datos guardados en Monday.com.</div>
-                </div>
+
+                {compareLoading && (
+                  <div className="card" style={{textAlign:'center',padding:40}}>
+                    <div className="spinner" style={{margin:'0 auto 16px'}}/>
+                    <div style={{fontSize:14,fontWeight:600}}>Analizando datos de Monday.com...</div>
+                  </div>
+                )}
+
+                {compareData && !compareLoading && (
+                  <div>
+                    {/* Headline de tendencia */}
+                    <div className="card" style={{marginBottom:16}}>
+                      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
+                        <span style={{fontSize:32}}>
+                          {compareData.analysis?.trend === 'up' ? '📈' : compareData.analysis?.trend === 'down' ? '📉' : '➡️'}
+                        </span>
+                        <div>
+                          <div style={{fontSize:16,fontWeight:700,color:'var(--text)'}}>{compareData.analysis?.headline}</div>
+                          <div style={{fontSize:12,color:'var(--text3)',marginTop:2}}>{compareMonth1} {compareYear1} → {compareMonth2} {compareYear2}</div>
+                        </div>
+                      </div>
+
+                      {/* Cards de cifras */}
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:12}}>
+                        {[
+                          { label: 'Posts totales', a: compareData.statsA?.totalPosts ?? 0, b: compareData.statsB?.totalPosts ?? 0 },
+                          { label: 'Programados', a: compareData.statsA?.scheduled ?? 0, b: compareData.statsB?.scheduled ?? 0 },
+                        ].map(({ label, a, b }) => {
+                          const diff = b - a
+                          return (
+                            <div key={label} style={{background:'var(--surface2)',borderRadius:'var(--r-sm)',padding:'12px 14px',border:'1px solid var(--border)'}}>
+                              <div style={{fontSize:10,color:'var(--text3)',letterSpacing:'.06em',marginBottom:6}}>{label.toUpperCase()}</div>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end'}}>
+                                <div>
+                                  <span style={{fontSize:11,color:'var(--text3)'}}>{compareMonth1}: </span>
+                                  <span style={{fontSize:18,fontWeight:700}}>{a}</span>
+                                </div>
+                                <div>
+                                  <span style={{fontSize:11,color:'var(--text3)'}}>{compareMonth2}: </span>
+                                  <span style={{fontSize:18,fontWeight:700}}>{b}</span>
+                                </div>
+                                <div style={{
+                                  fontSize:12, fontWeight:600, padding:'2px 8px', borderRadius:4,
+                                  background: diff > 0 ? 'rgba(45,212,191,.15)' : diff < 0 ? 'rgba(239,68,68,.15)' : 'var(--surface2)',
+                                  color: diff > 0 ? 'var(--teal)' : diff < 0 ? 'var(--red)' : 'var(--text3)'
+                                }}>
+                                  {diff > 0 ? '+' : ''}{diff}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid-2" style={{gap:16,marginBottom:16}}>
+                      {/* Highlights */}
+                      <div className="card">
+                        <div className="card-header"><div><div className="card-title">Observaciones clave</div></div></div>
+                        <ul style={{margin:0,padding:'0 0 0 16px'}}>
+                          {(compareData.analysis?.highlights ?? []).map((h: string, i: number) => (
+                            <li key={i} style={{fontSize:13,color:'var(--text2)',marginBottom:8,lineHeight:1.5}}>{h}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      {/* Recomendaciones */}
+                      <div className="card">
+                        <div className="card-header"><div><div className="card-title">Recomendaciones</div></div></div>
+                        <ul style={{margin:0,padding:'0 0 0 16px'}}>
+                          {(compareData.analysis?.recommendations ?? []).map((r: string, i: number) => (
+                            <li key={i} style={{fontSize:13,color:'var(--text2)',marginBottom:8,lineHeight:1.5}}>{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Tabla comparativa por formato */}
+                    <div className="card">
+                      <div className="card-header"><div><div className="card-title">Por formato</div></div></div>
+                      <div style={{overflowX:'auto' as const}}>
+                        <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:13}}>
+                          <thead>
+                            <tr style={{borderBottom:'1px solid var(--border)'}}>
+                              <th style={{textAlign:'left' as const,padding:'8px 12px',color:'var(--text3)',fontWeight:500,fontSize:11}}>FORMATO</th>
+                              <th style={{textAlign:'right' as const,padding:'8px 12px',color:'var(--text3)',fontWeight:500,fontSize:11}}>{compareMonth1}</th>
+                              <th style={{textAlign:'right' as const,padding:'8px 12px',color:'var(--text3)',fontWeight:500,fontSize:11}}>{compareMonth2}</th>
+                              <th style={{textAlign:'right' as const,padding:'8px 12px',color:'var(--text3)',fontWeight:500,fontSize:11}}>DELTA</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Array.from(new Set([
+                              ...Object.keys(compareData.statsA?.byFormat ?? {}),
+                              ...Object.keys(compareData.statsB?.byFormat ?? {}),
+                            ])).map(fmt => {
+                              const a = compareData.statsA?.byFormat?.[fmt] ?? 0
+                              const b = compareData.statsB?.byFormat?.[fmt] ?? 0
+                              const d = b - a
+                              return (
+                                <tr key={fmt} style={{borderBottom:'1px solid var(--border)'}}>
+                                  <td style={{padding:'8px 12px',color:'var(--text)'}}>{fmt}</td>
+                                  <td style={{padding:'8px 12px',textAlign:'right' as const,color:'var(--text2)'}}>{a}</td>
+                                  <td style={{padding:'8px 12px',textAlign:'right' as const,color:'var(--text2)'}}>{b}</td>
+                                  <td style={{padding:'8px 12px',textAlign:'right' as const,
+                                    color: d > 0 ? 'var(--teal)' : d < 0 ? 'var(--red)' : 'var(--text3)',
+                                    fontWeight:600}}>
+                                    {d > 0 ? '+' : ''}{d}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2088,7 +3431,7 @@ export default function Home() {
                               {item.platforms.join(', ')} {item.files.length > 0 ? `• ${item.files.length} archivo${item.files.length !== 1 ? 's' : ''}` : ''}
                             </div>
                             {item.wasAutoScheduled && (
-                              <div style={{fontSize:9, color:'var(--teal)', marginTop:4}}>⚙️ Programación automática</div>
+                              <div style={{fontSize:9, color:'var(--teal)', marginTop:4}} title={item.scheduleJustification}>⚙️ Programación automática</div>
                             )}
                           </div>
                         ))}
@@ -2100,8 +3443,8 @@ export default function Home() {
                     <div className="generate-area">
                       <div className="generate-title">Publicación Rápida</div>
                       <div className="generate-sub">
-                        Sube contenido ya creado (carruseles, posts, reels), la IA le agrega las descripciones
-                        y con un clic todo va al calendario de GHL programado con fecha, hora y plataformas.
+                    Sube contenido ya creado (carruseles, posts, reels), la IA le agrega las descripciones en <strong>inglés</strong>
+                    y con un clic todo va al calendario de GHL.
                       </div>
                       <div style={{display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap'}}>
                         <label className="btn btn-primary" style={{cursor:'pointer', marginBottom:0}}>
@@ -2188,13 +3531,13 @@ export default function Home() {
                                     {item.type === 'reel'
                                       ? 'Arrastra tu video o haz clic (MP4, MOV)'
                                       : item.type === 'carrusel'
-                                      ? 'Arrastra las imágenes o haz clic (2-10 imágenes)'
-                                      : 'Arrastra la imagen o haz clic (JPG, PNG)'}
+                                      ? 'Arrastra imágenes o videos (2-10 archivos)'
+                                      : 'Arrastra imagen o video (JPG, PNG, MP4)'}
                                   </div>
                                   <div style={{fontSize:11, color:'var(--text3)'}}>Seleccionar archivo</div>
                                   <input
                                     type="file"
-                                    accept={item.type === 'reel' ? 'video/mp4,video/mov,video/quicktime,video/avi,video/webm' : 'image/jpeg,image/png,image/gif,image/webp'}
+                                    accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/mov,video/quicktime,video/avi,video/webm"
                                     multiple
                                     style={{display:'none'}}
                                     onChange={e => handleMediaSelect(item.id, e.target.files)}
@@ -2203,26 +3546,35 @@ export default function Home() {
                               ) : (
                                 <div style={{padding:12}}>
                                   <div style={{display:'flex', gap:8, flexWrap:'wrap', marginBottom:8}}>
-                                    {item.files.map((f) => (
-                                      <div key={f.id} style={{position:'relative', width:76, height:76, borderRadius:6, overflow:'hidden', background:'var(--surface2)', flexShrink:0}}>
-                                        {f.mimeType.startsWith('video/') ? (
-                                          <video src={f.preview} style={{width:'100%', height:'100%', objectFit:'cover'}} muted/>
-                                        ) : (
-                                          <img src={f.preview} alt={f.name} style={{width:'100%', height:'100%', objectFit:'cover'}}/>
-                                        )}
-                                        <button
-                                          onClick={() => removeMediaFile(item.id, f.id)}
-                                          style={{position:'absolute', top:3, right:3, background:'rgba(0,0,0,0.65)', color:'white', border:'none', borderRadius:'50%', width:18, height:18, cursor:'pointer', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', padding:0}}
-                                        >✕</button>
-                                        {f.ghlUrl && (
-                                          <div style={{position:'absolute', bottom:2, left:2, background:'rgba(0,0,0,0.6)', color:'#4ade80', fontSize:9, borderRadius:3, padding:'1px 4px'}}>GHL</div>
+                                    {item.files.map((f, idx) => (
+                                      <div key={f.id} style={{display:'flex', flexDirection:'column', gap:4, width:76, flexShrink:0}}>
+                                        <div style={{position:'relative', width:76, height:76, borderRadius:6, overflow:'hidden', background:'var(--surface2)'}}>
+                                          {f.mimeType.startsWith('video/') ? (
+                                            <video src={f.preview} style={{width:'100%', height:'100%', objectFit:'cover', cursor:'zoom-in'}} muted onClick={() => setPreviewMedia({url: f.preview, type: f.mimeType})}/>
+                                          ) : (
+                                            <img src={f.preview} alt={f.name} style={{width:'100%', height:'100%', objectFit:'cover', cursor:'zoom-in'}} onClick={() => setPreviewMedia({url: f.preview, type: f.mimeType})}/>
+                                          )}
+                                          <button
+                                            onClick={() => removeMediaFile(item.id, f.id)}
+                                            style={{position:'absolute', top:3, right:3, background:'rgba(0,0,0,0.65)', color:'white', border:'none', borderRadius:'50%', width:18, height:18, cursor:'pointer', fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', padding:0}}
+                                          >✕</button>
+                                          {f.ghlUrl && (
+                                            <div style={{position:'absolute', bottom:2, left:2, background:'rgba(0,0,0,0.6)', color:'#4ade80', fontSize:9, borderRadius:3, padding:'1px 4px'}}>GHL</div>
+                                          )}
+                                        </div>
+                                        {item.files.length > 1 && (
+                                          <div style={{display: 'flex', justifyContent: 'space-between', fontSize: 10}}>
+                                            <button disabled={idx === 0} onClick={() => moveManualMedia(item.id, idx, idx - 1)} className="btn btn-xs btn-ghost" style={{padding: '2px 6px', height: 'auto'}}>◀</button>
+                                            <span style={{color: 'var(--text3)', alignSelf: 'center'}}>{idx + 1}</span>
+                                            <button disabled={idx === item.files.length - 1} onClick={() => moveManualMedia(item.id, idx, idx + 1)} className="btn btn-xs btn-ghost" style={{padding: '2px 6px', height: 'auto'}}>▶</button>
+                                          </div>
                                         )}
                                       </div>
                                     ))}
                                     {item.type === 'carrusel' && item.files.length < 10 && (
                                       <label style={{width:76, height:76, borderRadius:6, border:'1.5px dashed var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:22, color:'var(--text3)', flexShrink:0, background:'var(--surface2)'}}>
                                         +
-                                        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple style={{display:'none'}} onChange={e => handleMediaSelect(item.id, e.target.files, true)}/>
+                                        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,.mp4,.mov" multiple style={{display:'none'}} onChange={e => handleMediaSelect(item.id, e.target.files, true)}/>
                                       </label>
                                     )}
                                   </div>
@@ -2274,6 +3626,11 @@ export default function Home() {
                                 onChange={e => updateManualItem(item.id, {scheduledTime: e.target.value})}
                                 style={{...inputStyle, width:'auto'}}
                               />
+                              {item.scheduleJustification && (
+                                <div style={{flexBasis: '100%', fontSize: 11, color: 'var(--teal)', background: 'var(--surface2)', padding: '6px 10px', borderRadius: 4, marginTop: 4, display: 'flex', gap: 6, alignItems: 'center'}}>
+                                  <span style={{fontSize: 14}}>💡</span> {item.scheduleJustification}
+                                </div>
+                              )}
                             </div>
 
                             {/* Generate captions button */}
@@ -2400,7 +3757,7 @@ export default function Home() {
                   <div className="card-header">
                     <div>
                       <div className="card-title">🎯 Generador de Anuncios</div>
-                      <div className="card-sub">Sube una imagen, describe tu idea y Claude genera 3 variaciones de copy para paid social</div>
+                      <div className="card-sub">Sube una imagen, describe tu idea y Claude genera 3 variaciones de copy en <strong>inglés</strong> para paid social</div>
                     </div>
                   </div>
 

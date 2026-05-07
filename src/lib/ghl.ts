@@ -74,14 +74,15 @@ export async function createScheduledPost(post: {
   userId: string
 }) {
   const mimeFromUrl = (url: string) => {
-    if (/\.jpe?g$/i.test(url)) return 'image/jpeg'
-    if (/\.png$/i.test(url))   return 'image/png'
-    if (/\.gif$/i.test(url))   return 'image/gif'
-    if (/\.webp$/i.test(url))  return 'image/webp'
-    if (/\.mp4$/i.test(url))   return 'video/mp4'
-    if (/\.(mov|qt)$/i.test(url)) return 'video/quicktime'
-    if (/\.webm$/i.test(url))  return 'video/webm'
-    return 'image/jpeg'
+    const cleanUrl = url.split('?')[0]
+    if (/\.jpe?g$/i.test(cleanUrl)) return 'image/jpeg'
+    if (/\.png$/i.test(cleanUrl))   return 'image/png'
+    if (/\.gif$/i.test(cleanUrl))   return 'image/gif'
+    if (/\.webp$/i.test(cleanUrl))  return 'image/webp'
+    if (/\.mp4$/i.test(cleanUrl))   return 'video/mp4'
+    if (/\.(mov|qt)$/i.test(cleanUrl)) return 'video/mp4' // GHL y IG son más compatibles forzando video/mp4 para MOV
+    if (/\.webm$/i.test(cleanUrl))  return 'video/webm'
+    return post.postType === 'reel' ? 'video/mp4' : 'image/jpeg'
   }
 
   const media = (post.mediaUrls ?? [])
@@ -145,4 +146,52 @@ export async function getContacts(limit = 20) {
 
 export async function getLocationInfo() {
   return ghlRequest('GET', `/locations/${locationId()}`)
+}
+
+// Fetch new contacts created this month
+export async function getNewContactsCount(startDate: string, endDate: string): Promise<number> {
+  const locId  = process.env.GHL_LOCATION_ID!
+  const apiKey = process.env.GHL_API_KEY!
+  try {
+    const res = await fetch(
+      `https://services.leadconnectorhq.com/contacts/?locationId=${locId}&startDate=${startDate}&endDate=${endDate}&limit=100`,
+      { headers: { Authorization: `Bearer ${apiKey}`, Version: '2021-07-28' } }
+    )
+    if (!res.ok) return 0
+    const data = await res.json()
+    return data.meta?.total ?? (data.contacts?.length ?? 0)
+  } catch { return 0 }
+}
+
+// Fetch active opportunities count
+export async function getOpportunitiesCount(): Promise<number> {
+  const locId  = process.env.GHL_LOCATION_ID!
+  const apiKey = process.env.GHL_API_KEY!
+  try {
+    const res = await fetch(
+      `https://services.leadconnectorhq.com/opportunities/search?location_id=${locId}&status=open&limit=100`,
+      { headers: { Authorization: `Bearer ${apiKey}`, Version: '2021-07-28' } }
+    )
+    if (!res.ok) return 0
+    const data = await res.json()
+    return data.meta?.total ?? (data.opportunities?.length ?? 0)
+  } catch { return 0 }
+}
+
+// Fetch social posts published/scheduled via GHL this month
+export async function getSocialPostsThisMonth(startDate: string, endDate: string): Promise<{ total: number; published: number; scheduled: number }> {
+  const locId  = process.env.GHL_LOCATION_ID!
+  const apiKey = process.env.GHL_API_KEY!
+  try {
+    const res = await fetch(
+      `https://services.leadconnectorhq.com/social-media-posting/${locId}/posts?startDate=${startDate}&endDate=${endDate}&limit=200`,
+      { headers: { Authorization: `Bearer ${apiKey}`, Version: '2021-07-28' } }
+    )
+    if (!res.ok) return { total: 0, published: 0, scheduled: 0 }
+    const data = await res.json()
+    const posts: any[] = data.posts ?? data.data ?? []
+    const published = posts.filter((p: any) => p.status === 'published' || p.status === 'PUBLISHED').length
+    const scheduled = posts.filter((p: any) => p.status === 'scheduled' || p.status === 'SCHEDULED').length
+    return { total: posts.length, published, scheduled }
+  } catch { return { total: 0, published: 0, scheduled: 0 } }
 }

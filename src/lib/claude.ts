@@ -1,6 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+function getClient(): Anthropic {
+  const key = process.env.ANTHROPIC_API_KEY
+  if (!key) throw new Error('ANTHROPIC_API_KEY not set in environment variables')
+  return new Anthropic({ apiKey: key })
+}
 
 const SKILLS = {
 
@@ -409,7 +413,7 @@ export async function runSkill(
   }
 
   const callAnthropic = async () => {
-    const response = await client.messages.create(params)
+    const response = await getClient().messages.create(params)
     const text = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)

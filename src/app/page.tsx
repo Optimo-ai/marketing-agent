@@ -875,28 +875,50 @@ export default function Home() {
     setLoading(true)
     setLoadingText(`Aplicando marca a ${assignedPosts.length} posts...`)
     try {
-      // Mezclar overrides de texto con los posts asignados
-      const assignmentsWithText = assignedPosts.map(p => {
+      // Procesar asignaciones una por una para evitar sobrepasar el límite de payload (4.5MB) de Vercel
+      let fromDrive = 0, fromAI = 0, carousels = 0;
+      const rendered: any[] = [];
+
+      for (let i = 0; i < assignedPosts.length; i++) {
+        const p = assignedPosts[i];
+        setLoadingText(`Aplicando marca (${i + 1}/${assignedPosts.length}): ${p.postName}...`)
+        
         const override = postTextOverrides[p.postId]
-        return {
+        const assignmentWithText = {
           ...p,
           ...(override?.title ? { postName: override.title } : {}),
           ...(override?.body  ? { contentDirection: override.body } : {}),
         }
-      })
-      const renderRes = await fetch('/api/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assignments: assignmentsWithText }),
-      })
-      const renderData = await renderRes.json()
-      if (!renderRes.ok) throw new Error(renderData.error ?? `Render error ${renderRes.status}`)
 
-      setRenderedPosts(renderData.posts)
-      setDesigns(renderData.posts) // compatibilidad con Fase 5
-      setFase3Stats({ fromDrive: renderData.fromDrive, fromAI: renderData.fromAI, carousels: renderData.carousels })
+        const renderRes = await fetch('/api/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignments: [assignmentWithText] }),
+        })
+        
+        const text = await renderRes.text();
+        let renderData;
+        try {
+          renderData = JSON.parse(text);
+        } catch (e) {
+          throw new Error(`Respuesta no válida del servidor (HTTP ${renderRes.status}). Posible payload excesivo.`);
+        }
+        
+        if (!renderRes.ok) throw new Error(renderData.error ?? `Render error ${renderRes.status}`)
+        
+        if (renderData.posts && renderData.posts.length > 0) {
+          rendered.push(...renderData.posts);
+          fromDrive += renderData.fromDrive || 0;
+          fromAI += renderData.fromAI || 0;
+          carousels += renderData.carousels || 0;
+        }
+      }
+
+      setRenderedPosts(rendered)
+      setDesigns(rendered) // compatibilidad con Fase 5
+      setFase3Stats({ fromDrive, fromAI, carousels })
       setFase3Step('review')
-      showToast(`✓ ${renderData.rendered} posts listos para revisión`)
+      showToast(`✓ ${rendered.length} posts listos para revisión`)
     } catch (e: unknown) {
       showToast('Error Fase 3 (Render): ' + String(e))
       setFase3Step('confirm_assignment')
@@ -927,7 +949,15 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assignments: [{ ...assignment, needsAI: true }] }),
       })
-      const data = await res.json()
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Respuesta no válida del servidor (HTTP ${res.status}).`);
+      }
+      if (!res.ok) throw new Error(data.error ?? 'Render error');
+
       if (data.posts?.[0]) {
         setRenderedPosts((prev: any[]) =>
           prev.map((p: any) => String(p.postId) === String(post.postId) ? data.posts[0] : p)
@@ -1063,31 +1093,54 @@ export default function Home() {
     setAiMediaErrors([])
     setSessionFalJobIds([])
     try {
-      const res = await fetch('/api/generate-media', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ posts }),
-      })
+      const allItems: any[] = [];
+      const allErrors: any[] = [];
+      const allJobIds: string[] = [];
       
-      let data;
-      const text = await res.text();
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        throw new Error(`Error en servidor (${res.status}): ${text.slice(0, 100)}`);
+      for (let i = 0; i < posts.length; i++) {
+        const post = posts[i];
+        setLoadingText(`Generando con IA (${i + 1}/${posts.length}): ${post.name ?? post.postName ?? ''}...`);
+        
+        try {
+          const res = await fetch('/api/generate-media', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ posts: [post] }),
+          });
+          
+          const text = await res.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (err) {
+            throw new Error(`Respuesta inválida del servidor (HTTP ${res.status}). Posible timeout o payload muy grande.`);
+          }
+          
+          if (!res.ok) throw new Error(data?.error || `Error HTTP: ${res.status}`);
+          if (data.error) throw new Error(data.error);
+          
+          if (data.items && data.items.length > 0) {
+            allItems.push(...data.items);
+            setAiMediaItems([...allItems]); // Actualiza estado progresivamente
+            const jobs = data.items.flatMap((m: any) => m.falJobIds ?? m.higgsfieldJobIds ?? []);
+            allJobIds.push(...jobs);
+            setSessionFalJobIds([...allJobIds]);
+          }
+          if (data.errors && data.errors.length > 0) {
+            allErrors.push(...data.errors);
+            setAiMediaErrors([...allErrors]);
+          }
+        } catch (postErr: unknown) {
+          console.error(`[generateAIMedia] Error en post ${post.name}:`, postErr);
+          allErrors.push({ postName: post.name, error: String(postErr) });
+          setAiMediaErrors([...allErrors]);
+        }
       }
       
-      if (!res.ok) throw new Error(data?.error || `Error HTTP: ${res.status}`);
-      if (data.error) throw new Error(data.error)
-      setAiMediaItems(data.items ?? [])
-      setAiMediaErrors(data.errors ?? [])
-      // Guardar todos los job IDs de Fal AI de esta sesión
-      const allJobIds: string[] = (data.items ?? []).flatMap((m: any) => m.falJobIds ?? [])
-      setSessionFalJobIds(allJobIds)
       setFase3Step('ai_review')
-      showToast(`✓ ${data.generated} medios generados — revisa y aprueba`)
+      showToast(`✓ ${allItems.length} medios generados — revisa y aprueba`)
     } catch (e: unknown) {
-      showToast('Error: ' + String(e))
+      showToast('Error general: ' + String(e))
       setFase3Step('idle')
     } finally {
       setLoading(false)
@@ -1110,7 +1163,7 @@ export default function Home() {
       try {
         data = JSON.parse(text);
       } catch (err) {
-        throw new Error(`Error en servidor (${res.status}): ${text.slice(0, 100)}`);
+        throw new Error(`Respuesta inválida del servidor (HTTP ${res.status}). Posible payload excesivo.`);
       }
       
       if (!res.ok) throw new Error(data?.error || `Error HTTP: ${res.status}`);
@@ -2541,8 +2594,10 @@ export default function Home() {
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ videoUrl: post.videoUrl, postName: post.postName, contentDirection: post.contentDirection, project: post.project })
                                           })
-                                          const data = await res.json()
-                                          if (!res.ok) throw new Error(data.error)
+                                          const text = await res.text()
+                                          let data;
+                                          try { data = JSON.parse(text) } catch(e) { throw new Error(`Fallo JSON servidor HTTP ${res.status}`) }
+                                          if (!res.ok) throw new Error(data.error || 'Error en edición')
                                           setRenderedPosts(prev => prev.map(p => String(p.postId) === String(post.postId) ? { ...p, videoUrl: data.editedVideoUrl } : p))
                                           setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'done' }))
                                           showToast('✓ Video regenerado')
@@ -2564,7 +2619,9 @@ export default function Home() {
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({ videoUrl: post.videoUrl, postName: post.postName, contentDirection: post.contentDirection, project: post.project })
                                           })
-                                          const data = await res.json()
+                                          const text = await res.text()
+                                          let data;
+                                          try { data = JSON.parse(text) } catch(e) { throw new Error(`Fallo JSON servidor HTTP ${res.status}`) }
                                           if (!res.ok) throw new Error(data.error || 'Error en edición')
                                           setRenderedPosts(prev => prev.map(p => String(p.postId) === String(post.postId) ? { ...p, videoUrl: data.editedVideoUrl } : p))
                                           setVideoGenStatus(prev => ({ ...prev, [post.postId]: 'done' }))

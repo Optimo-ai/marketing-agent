@@ -146,7 +146,7 @@ export async function runSkill(
   }
 }
 
-export function parseJSON<T>(raw: string): T {
+export function parseJSON<T>(raw: string, fallback?: T): T {
   try {
     // Step 1: Remove markdown fences
     let text = raw.replace(/```(?:json)?\s*/gi, '').trim()
@@ -156,29 +156,28 @@ export function parseJSON<T>(raw: string): T {
       return JSON.parse(text) as T
     } catch (_) {}
     
-    // Step 3: Find and extract JSON content more aggressively
-    // Look for the start of JSON ([ or {) and work backwards from the end
+    // Step 3: Find and extract JSON content
     const firstBracket = Math.max(
-      text.lastIndexOf('[', text.length),
-      text.lastIndexOf('{', text.length)
+      text.lastIndexOf('['),
+      text.lastIndexOf('{')
     )
     
     if (firstBracket === -1) {
+      if (fallback !== undefined) {
+        console.warn('[parseJSON] No JSON found, using fallback')
+        return fallback
+      }
       throw new Error('No JSON found in response')
     }
     
-    // Find matching closing bracket from the end
     text = text.substring(firstBracket)
+    text = text.replace(/[^\]}]\s*$/g, '')
     
-    // Step 4: Remove trailing garbage
-    text = text.replace(/[^\]}]\s*$/g, '') // Remove non-bracket trailing chars
-    
-    // Step 5: Try parse again
     try {
       return JSON.parse(text) as T
     } catch (_) {}
     
-    // Step 6: Auto-close any unclosed structures
+    // Step 4: Auto-close structures
     let fixed = text
     let openBraces = (fixed.match(/\{/g) || []).length
     let closeBraces = (fixed.match(/\}/g) || []).length
@@ -194,19 +193,30 @@ export function parseJSON<T>(raw: string): T {
       closeBrackets++
     }
     
-    // Step 7: Remove trailing commas
     fixed = fixed.replace(/,\s*([}\]])/g, '$1')
+    fixed = fixed.replace(/:\s*,/g, ': null,')
+    fixed = fixed.replace(/,\s*$/, '')
     
-    // Step 8: Try final parse
+    // Step 5: Final attempt
     try {
       return JSON.parse(fixed) as T
-    } catch (err) {
-      console.error('[parseJSON] Failed. Input (first 200 chars):', raw.slice(0, 200))
+    } catch (parseErr) {
+      // If all else fails and we have a fallback, use it
+      if (fallback !== undefined) {
+        console.error('[parseJSON] All recovery attempts failed, using fallback. Error:', String(parseErr).slice(0, 100))
+        return fallback
+      }
+      
+      console.error('[parseJSON] CRITICAL: No valid JSON and no fallback provided')
+      console.error('[parseJSON] Original input (first 200 chars):', raw.slice(0, 200))
       console.error('[parseJSON] After fixes (last 300 chars):', fixed.slice(-300))
-      throw new Error(`Failed to parse JSON: ${String(err).slice(0, 100)}`)
+      throw new Error(`JSON parse failed: ${String(parseErr).slice(0, 100)}`)
     }
   } catch (error) {
-    console.error('[parseJSON] Fatal error:', error)
+    if (fallback !== undefined) {
+      console.error('[parseJSON] Exception caught, using fallback:', error)
+      return fallback
+    }
     throw error
   }
 }

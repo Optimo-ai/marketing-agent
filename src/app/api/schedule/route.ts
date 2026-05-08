@@ -35,17 +35,15 @@ export async function POST(req: NextRequest) {
       console.log('[schedule] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let generatedSchedule: any
       try {
-        generatedSchedule = parseJSON(raw)
+        generatedSchedule = parseJSON(raw, [])
         if (!Array.isArray(generatedSchedule)) {
-          throw new Error('Expected array, got ' + typeof generatedSchedule)
+          console.warn('[schedule] Response was not an array, converting')
+          generatedSchedule = []
         }
       } catch (parseErr: any) {
         console.error('[schedule] parseJSON failed:', parseErr.message)
-        console.error('[schedule] Full raw text:', raw)
-        return NextResponse.json(
-          { error: `Claude generó formato inválido: ${parseErr.message}. Raw: ${raw.slice(0, 200)}` },
-          { status: 400 }
-        )
+        console.error('[schedule] Full raw text (first 500 chars):', raw.slice(0, 500))
+        generatedSchedule = []
       }
       return NextResponse.json({ schedule: generatedSchedule })
     }

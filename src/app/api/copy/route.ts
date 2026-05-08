@@ -51,17 +51,15 @@ export async function POST(req: NextRequest) {
       console.log('[copy] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let copy: any
       try {
-        copy = parseJSON(raw)
+        copy = parseJSON(raw, [])
         if (!Array.isArray(copy)) {
-          throw new Error('Expected array, got ' + typeof copy)
+          console.warn('[copy] Response was not an array, converting')
+          copy = []
         }
       } catch (parseErr: any) {
         console.error('[copy] parseJSON failed:', parseErr.message)
-        console.error('[copy] Full raw text:', raw)
-        return NextResponse.json(
-          { error: `Claude generó formato inválido: ${parseErr.message}. Raw: ${raw.slice(0, 200)}` },
-          { status: 400 }
-        )
+        console.error('[copy] Full raw text (first 500 chars):', raw.slice(0, 500))
+        copy = []
       }
       return NextResponse.json({ copy, boardId: boardIdToReturn })
     }

@@ -28,17 +28,15 @@ ${typeof briefing === 'string' ? briefing : JSON.stringify(briefing, null, 2)}`
       console.log('[calendar] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let generatedCalendar: any
       try {
-        generatedCalendar = parseJSON(raw)
+        generatedCalendar = parseJSON(raw, [])
         if (!Array.isArray(generatedCalendar)) {
-          throw new Error('Expected array, got ' + typeof generatedCalendar)
+          console.warn('[calendar] Response was not an array, converting to array')
+          generatedCalendar = Array.isArray(generatedCalendar) ? generatedCalendar : []
         }
       } catch (parseErr: any) {
         console.error('[calendar] parseJSON failed:', parseErr.message)
-        console.error('[calendar] Full raw text:', raw)
-        return NextResponse.json(
-          { error: `Claude generó formato inválido: ${parseErr.message}. Raw: ${raw.slice(0, 200)}` },
-          { status: 400 }
-        )
+        console.error('[calendar] Full raw text (first 500 chars):', raw.slice(0, 500))
+        generatedCalendar = []
       }
       return NextResponse.json({ calendar: generatedCalendar })
     }

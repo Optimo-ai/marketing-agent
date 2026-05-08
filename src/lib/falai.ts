@@ -25,7 +25,7 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
 
   let imageSizeParam: string | { width: number; height: number } = { width, height };
   if (width === 1280 && height === 720) imageSizeParam = "landscape_16_9";
-  else if (width === 768 && height === 1344) imageSizeParam = "portrait_9_16";
+  else if (width === 768 && height === 1344) imageSizeParam = "portrait_16_9";
   else if (width === 1024 && height === 1024) imageSizeParam = "square_hd";
 
   try {

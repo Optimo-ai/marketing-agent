@@ -104,13 +104,20 @@ Platform rules:
 - GMB: 100-300 words, local SEO, project name + location (Downtown Punta Cana / Vista Cana) + contact
 - Lead Magnet: hook + tease 3 bullets + "Comment [KEYWORD]" CTA
 
-For each post, respond with a JSON array. Each object MUST have:
-- postId: the numeric ID
-- postName: the post name
-- copyIG, copyFB, copyLI, copyGMB: the copy text for each platform OR null if not needed
+For each post, respond with a JSON array of objects. Each object MUST have these fields:
+- postId (number)
+- postName (string)
+- copyIG (string or null)
+- copyFB (string or null)
+- copyLI (string or null)
+- copyGMB (string or null)
 
-CRITICAL: Respond with ONLY a valid JSON array — no markdown, no code fences, no extra text, no line breaks before/after:
-[{"postId":1,"postName":"string","copyIG":"string or null","copyFB":"string or null","copyLI":"string or null","copyGMB":"string or null"},{"postId":2,"postName":"string","copyIG":"string or null","copyFB":"string or null","copyLI":"string or null","copyGMB":"string or null"}]`,
+CRITICAL: Output ONLY valid JSON. No markdown backticks, no explanations, no extra text. Format naturally with line breaks for readability:
+
+[
+  {"postId": 1, "postName": "Post Name", "copyIG": "Instagram text", "copyFB": "Facebook text", "copyLI": "LinkedIn text", "copyGMB": "GMB text"},
+  {"postId": 2, "postName": "Post Name 2", "copyIG": "text", "copyFB": null, "copyLI": null, "copyGMB": "text"}
+]`,
 
   ads: `You are a senior paid media creative director for Noriega Group, a luxury real estate developer in Dominican Republic.
 You receive an image (base64) and a creative idea/message the client wants to transmit.

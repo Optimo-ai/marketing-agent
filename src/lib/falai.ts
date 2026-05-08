@@ -68,7 +68,6 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   }
 }
 
-// ─── VIDEOS ──────────────────────────────────────────────────────────────────
 export interface GenerateVideoOptions {
     prompt: string
     aspectRatio?: '16:9' | '9:16' | '1:1'
@@ -111,6 +110,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
   if (!apiKey) throw new Error("FAL_KEY_MISSING");
 
   console.log(`[falai] Generando video (aspect: ${opts.aspectRatio || '16:9'}):`, opts.prompt.slice(0, 50) + "...");
+
 
   try {
     let result: any;

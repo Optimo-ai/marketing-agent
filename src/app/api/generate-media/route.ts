@@ -176,8 +176,8 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
                 isRealVideo     = false
               } catch (imgErr) {
                 console.error(`[generate-media] Image thumbnail falló para "${postName}":`, String(imgErr).slice(0, 150))
-                errors.push({ postId, postName, error: `Video fallido: ${String(videoErr).slice(0, 100)}` })
-                continue
+                errors.push({ postId, postName, error: `Imagen estática fallida: ${String(imgErr).slice(0, 100)}` })
+                return
               }
             }
 

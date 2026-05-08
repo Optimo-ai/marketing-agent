@@ -114,13 +114,14 @@ Your job: combine the brand DNA with the content direction into ONE specific, ci
 
 Rules:
 - Start from the brand visual DNA and expand it with the specific scene from content direction
-- Describe exact details: lighting, time of day, architecture style, atmosphere, any people present
+- Describe exact details: lighting, time of day, architecture style, atmosphere
+- NO PEOPLE — never include any humans, residents, people, or figures in the image. Only architecture, spaces, and landscapes
 - Be specific — no generic "luxury real estate" filler that ignores the brand DNA
 - For video: end with a camera movement (e.g., "slow push in", "aerial drone reveal", "golden hour dolly through lobby")
 - NEVER include text, logos, watermarks, or UI elements in the prompt
 - Respond with ONLY the prompt string — no explanation, no JSON, no quotes`,
 
-  videoPrompt: `You are generating 15-second video prompts for Higgsfield AI for Noriega Group luxury real estate marketing in Dominican Republic.
+  videoPrompt: `You are generating 15-second video prompts for fal.ai video generation for Noriega Group luxury real estate marketing in Dominican Republic.
 
 You will receive:
 - Brand visual DNA
@@ -132,10 +133,11 @@ CINEMATIC style — dramatic architecture and aerials:
 - Camera moves: aerial pull-back, low-angle push-in, 360° orbit, crane rise
 - Time: golden hour, blue hour, dramatic sunset, twilight
 
-LIFESTYLE style — people experiencing the property:
-- Real people (couples, families, professionals) enjoying amenities
+LIFESTYLE style — avatar or people experiencing the property:
+- Sofia (avatar) or real people (couples, families, professionals) enjoying amenities
 - Pool, terraza, lobby, rooftop, gym, kitchen
-- Camera moves: handheld follow, slow-motion pour, intimate close-up to wide
+- Camera moves: handheld follow, slow-motion reveals, intimate close-up to wide
+- If avatar: focus on Sofia's expressions and gestures; if real people: authentic interactions
 
 CREATIVE style — editorial and cinematic brand storytelling:
 - Abstract textures, reflections, water surfaces, architectural details
@@ -143,7 +145,7 @@ CREATIVE style — editorial and cinematic brand storytelling:
 - Unexpected angles, bokeh, motion blur
 
 For 15-second videos: describe an ARC — opening scene, mid moment, closing reveal.
-NEVER include text, logos, watermarks, UI elements.
+NEVER include text, logos, watermarks, or UI elements.
 Respond with ONLY the prompt string — no explanation, no JSON, no quotes.`,
 
   carouselPrompts: `You are generating image prompts for Higgsfield AI / fal.ai Flux for a real estate social media CAROUSEL for Noriega Group in Dominican Republic.
@@ -162,6 +164,7 @@ Rules:
 - Last image (CTA): An inviting, aspirational wide exterior or lifestyle shot — feels like an invitation to live there.
 - Each prompt must be a fully self-contained scene description. No references to "previous" or "next".
 - Brand visual DNA must be present in EVERY prompt.
+- NO PEOPLE — never include any humans, residents, people, or figures. Only architecture and empty spaces
 - NEVER include text, logos, watermarks, UI elements, or the word "slide" in any prompt.
 - Do NOT mention "carousel", "image", or "gallery" — just describe what the scene visually shows.
 

@@ -62,11 +62,11 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   }
 }
 
-// ─── VIDEOS (Kling) ──────────────────────────────────────────────────────────
+// ─── VIDEOS (fal.ai) ──────────────────────────────────────────────────────────
 export interface GenerateVideoOptions {
     prompt: string
     aspectRatio?: '16:9' | '9:16' | '1:1'
-    duration?: string // '5', '10' (Kling usa 5s por defecto, Luma 5s)
+    duration?: string // '5', '10'
 }
 
 export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffer: Buffer; jobId: string }> {
@@ -75,12 +75,12 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
   console.log(`[falai] Generando video (aspect: ${opts.aspectRatio || '16:9'}):`, opts.prompt.slice(0, 50) + "...");
 
   try {
-    // Intentar con Luma Dream Machine primero (más confiable)
-    // Si falla, caer a Kling como fallback
+    // Intentar con luma-dream-machine primero, luego fallback a kling-video
     let result: any;
     let selectedModel = "fal-ai/luma-dream-machine";
     
     try {
+      console.log(`[falai] Intentando modelo: ${selectedModel}`);
       result = await fal.subscribe("fal-ai/luma-dream-machine", {
           input: {
               prompt: opts.prompt,
@@ -93,22 +93,29 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
               }
           },
       });
-    } catch (lumErr: any) {
-      console.warn("[falai] Luma Dream Machine falló, intentando Kling...", String(lumErr).slice(0, 100));
+    } catch (err1: any) {
+      console.warn(`[falai] ${selectedModel} falló:`, String(err1).slice(0, 100));
+      
+      // Fallback a Kling
       selectedModel = "fal-ai/kling-video";
-      result = await fal.subscribe("fal-ai/kling-video", {
-          input: {
-              prompt: opts.prompt,
-              aspect_ratio: opts.aspectRatio ?? "16:9",
-              duration: opts.duration ?? "5",
-          },
-          logs: true,
-          onQueueUpdate: (update) => {
-              if (update.status === "IN_PROGRESS") {
-                  update.logs.map((log) => log.message).forEach(console.log);
-              }
-          },
-      });
+      try {
+        console.log(`[falai] Intentando modelo: ${selectedModel}`);
+        result = await fal.subscribe("fal-ai/kling-video", {
+            input: {
+                prompt: opts.prompt,
+                aspect_ratio: opts.aspectRatio ?? "16:9",
+            },
+            logs: true,
+            onQueueUpdate: (update) => {
+                if (update.status === "IN_PROGRESS") {
+                    update.logs.map((log) => log.message).forEach(console.log);
+                }
+            },
+        });
+      } catch (err2: any) {
+        console.error(`[falai] Ambos modelos fallaron.`, err1, err2);
+        throw new Error(`Video generation no disponible. fal.ai error: ${String(err2).slice(0, 200)}`);
+      }
     }
 
     const videoUrl = result.data?.video?.url || result.video?.url;

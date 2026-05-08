@@ -127,12 +127,13 @@ export async function POST(req: NextRequest) {
             let higgsfieldJobId: string | undefined
             let subtitleLines: string[] = []
 
-            // ── CINEMATIC / LIFESTYLE / CREATIVE (Avatar now falls back to lifestyle) ──
+            // ── CINEMATIC / LIFESTYLE / CREATIVE ──
             // Reels → portrait 9:16; other video → landscape 16:9
             const isReel = (postFormat ?? '').toLowerCase().includes('reel')
             const videoAspect: '9:16' | '16:9' = isReel ? '9:16' : '16:9'
 
-            if (!videoBuffer) {
+            // Intentar generar video
+            try {
               const claudeInput = `Brand: ${config.displayName}
 Brand visual DNA: ${config.aiPromptBase}
 Project: ${post.project ?? ''}
@@ -146,24 +147,35 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
               const result = await generateVideoTracked({
                 prompt:      cleanPrompt,
                 aspectRatio: videoAspect,
-                duration:    '5', // Kling uses 5 by default, updated from 15
+                duration:    '5',
               })
               videoBuffer     = result.buffer
               higgsfieldJobId = result.jobId
               isRealVideo     = true
               console.log(`[generate-media] Video 5s (${videoStyle} ${videoAspect}) listo para "${postName}"`)
+            } catch (videoErr) {
+              console.warn(`[generate-media] Video generation falló para "${postName}":`, String(videoErr).slice(0, 150))
+              // Fallback: generar imagen estática
+              videoBuffer = null
+              isRealVideo = false
             }
 
-            // If Higgsfield video fails, generate a static image thumbnail instead
+            // Si video falló, generar thumbnail estático
             if (!videoBuffer) {
-              console.warn(`[generate-media] Video Higgsfield no disponible para "${postName}" — generando thumbnail estático`)
-              const imgResult = await generateAnyImage(
-                contentDir + ', cinematic still frame, luxury real estate',
-                videoAspect,
-              )
-              videoBuffer     = imgResult.buffer
-              higgsfieldJobId = imgResult.jobId
-              // isRealVideo remains false → will be processed as static image
+              console.warn(`[generate-media] Generando thumbnail estático para "${postName}"`)
+              try {
+                const imgResult = await generateAnyImage(
+                  config.aiPromptBase + ', ' + contentDir.slice(0, 50) + ', cinematic still frame, no people, luxury real estate',
+                  videoAspect,
+                )
+                videoBuffer     = imgResult.buffer
+                higgsfieldJobId = imgResult.jobId
+                isRealVideo     = false
+              } catch (imgErr) {
+                console.error(`[generate-media] Image thumbnail falló para "${postName}":`, String(imgErr).slice(0, 150))
+                errors.push({ postId, postName, error: `Video fallido: ${String(videoErr).slice(0, 100)}` })
+                continue
+              }
             }
 
             // Step post: procesar video o usar thumbnail estático
@@ -172,10 +184,9 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
             let finalDataUrlPrefix: string
 
             if (isRealVideo) {
-              // Subtítulo: si es avatar usar las líneas en español; si no, el contentDir
               const subtitleText = subtitleLines.length > 0
                 ? subtitleLines.join(' • ')
-                : contentDir.slice(0, 72)
+                : postName.slice(0, 72)
 
               try {
                 const processed = await processVideo({
@@ -187,7 +198,7 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
                 finalVideoBuffer   = processed.buffer
                 finalMimeType      = processed.mimeType
                 finalDataUrlPrefix = 'data:video/mp4;base64,'
-                console.log(`[generate-media] Video procesado (subtítulos ES + endcard) para "${postName}"`)
+                console.log(`[generate-media] Video procesado (subtítulos + endcard) para "${postName}"`)
               } catch (procErr) {
                 console.warn(`[generate-media] FFmpeg falló, video crudo:`, String(procErr).slice(0, 120))
                 finalVideoBuffer   = videoBuffer!
@@ -261,16 +272,14 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
             // Step 3: Renderizar los 4 slides según patrón Foto→Negro→Foto→Negro
             // Copies de texto por slide:
             //   slide 0 (Foto+logo): postName como título
-            //   slide 1 (Negro): punto clave del proyecto
+            //   slide 1 (Negro): brand name
             //   slide 2 (Foto): visual limpio, sin título
             //   slide 3 (Negro+website): CTA breve
-            // Limpiar la palabra "slide" del contenido
-            const cleanContentDir = contentDir.replace(/slide/gi, 'post').replace(/slides/gi, 'posts')
             const slideTexts = [
-              { title: postName,                       body: cleanContentDir.slice(0, 55) },
-              { title: cleanContentDir.slice(0, 50),   body: '' },
-              { title: '',                             body: '' },
-              { title: config.displayName.toUpperCase(), body: '' },
+              { title: postName,                            body: '' },
+              { title: config.displayName,                  body: '' },
+              { title: '',                                  body: '' },
+              { title: config.displayName.toUpperCase(),    body: '' },
             ]
 
             let photoIdx = 0

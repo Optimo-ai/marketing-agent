@@ -1,16 +1,8 @@
 // src/lib/falai.ts
 // Generación de imágenes y video usando fal.ai como motor principal.
-import { fal } from "@fal-ai/client";
+// Implementación 100% nativa con fetch (sin dependencias externas) para evitar errores de compilación.
 
-// Asegurarnos de que las variables de entorno están cargadas (útil en dev)
-import * as dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
-
-// Fal.ai SDK intentará leer FAL_KEY del entorno automáticamente, pero lo aseguramos:
 const apiKey = process.env.FAL_KEY || process.env.FAL_API_KEY;
-if (apiKey) {
-    fal.config({ credentials: apiKey });
-}
 
 export interface GenerateImageOptions {
   prompt: string
@@ -20,10 +12,10 @@ export interface GenerateImageOptions {
   guidanceScale?: number
 }
 
-// ─── IMÁGENES (Flux) ────────────────────────────────────────────────────────
+// ─── IMÁGENES (Flux Schnell) ────────────────────────────────────────────────
 export async function generateImage(opts: GenerateImageOptions): Promise<Buffer> {
   if (!apiKey) {
-      console.warn("FAL_KEY no encontrada. Por favor revisa .env.local");
+      console.warn("FAL_KEY no encontrada en .env.local");
       throw new Error("FAL_KEY_MISSING");
   }
 
@@ -36,28 +28,36 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   else if (width === 1024 && height === 1024) imageSizeParam = "square_hd";
 
   try {
-    const result: any = await fal.subscribe("fal-ai/flux/schnell", {
-        input: {
+    const res = await fetch("https://fal.run/fal-ai/flux/schnell", {
+        method: "POST",
+        headers: {
+            "Authorization": `Key ${apiKey}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
             prompt: prompt,
             image_size: imageSizeParam,
             num_inference_steps: Math.min(opts.numInferenceSteps ?? 4, 4),
             num_images: 1,
             enable_safety_checker: false,
             output_format: 'jpeg',
-        },
-        logs: true,
-        onQueueUpdate: (update) => {
-            if (update.status === "IN_PROGRESS") {
-                update.logs.map((log) => log.message).forEach(console.log);
-            }
-        },
+        })
     });
 
-    const imageUrl = result.data?.images?.[0]?.url || result.images?.[0]?.url;
-    if (!imageUrl) throw new Error(`fal.ai no devolvió URL de imagen. Payload: ${JSON.stringify(result).slice(0, 200)}`);
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`fal.ai API error (${res.status}): ${errText}`);
+    }
+
+    const result = await res.json();
+    const imageUrl = result.images?.[0]?.url || result.data?.images?.[0]?.url;
+    
+    if (!imageUrl) {
+        throw new Error(`fal.ai no devolvió URL de imagen. Payload: ${JSON.stringify(result).slice(0, 200)}`);
+    }
 
     const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) throw new Error('No se pudo descargar la imagen de fal.ai');
+    if (!imgRes.ok) throw new Error('No se pudo descargar la imagen generada de fal.ai');
     
     return Buffer.from(await imgRes.arrayBuffer());
 
@@ -67,11 +67,43 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   }
 }
 
-// ─── VIDEOS (fal.ai) ──────────────────────────────────────────────────────────
+// ─── VIDEOS ──────────────────────────────────────────────────────────────────
 export interface GenerateVideoOptions {
     prompt: string
     aspectRatio?: '16:9' | '9:16' | '1:1'
-    duration?: string // '5', '10'
+    duration?: string
+}
+
+async function pollFalQueue(statusUrl: string, responseUrl: string): Promise<any> {
+    while (true) {
+        const res = await fetch(statusUrl, {
+            headers: {
+                "Authorization": `Key ${apiKey}`,
+                "Content-Type": "application/json"
+            }
+        });
+        
+        if (!res.ok) {
+            throw new Error(`Error en polling (${res.status}): ${await res.text()}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.status === 'COMPLETED') {
+            const finalRes = await fetch(responseUrl, {
+                headers: { "Authorization": `Key ${apiKey}` }
+            });
+            if (!finalRes.ok) throw new Error("Error obteniendo resultado final");
+            return await finalRes.json();
+        }
+        
+        if (data.status === 'IN_QUEUE' || data.status === 'IN_PROGRESS') {
+            await new Promise(r => setTimeout(r, 3000));
+            continue;
+        }
+        
+        throw new Error(`Estado inesperado de fal.ai: ${data.status}`);
+    }
 }
 
 export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffer: Buffer; jobId: string }> {
@@ -80,50 +112,51 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
   console.log(`[falai] Generando video (aspect: ${opts.aspectRatio || '16:9'}):`, opts.prompt.slice(0, 50) + "...");
 
   try {
-    // Intentar con luma-dream-machine primero, luego fallback a kling-video
     let result: any;
     let selectedModel = "fal-ai/luma-dream-machine";
-    
-    try {
-      console.log(`[falai] Intentando modelo: ${selectedModel}`);
-      result = await fal.subscribe("fal-ai/luma-dream-machine", {
-          input: {
-              prompt: opts.prompt,
-              aspect_ratio: opts.aspectRatio ?? "16:9",
-          },
-          logs: true,
-          onQueueUpdate: (update) => {
-              if (update.status === "IN_PROGRESS") {
-                  update.logs.map((log) => log.message).forEach(console.log);
-              }
-          },
-      });
-    } catch (err1: any) {
-      console.warn(`[falai] ${selectedModel} falló:`, String(err1).slice(0, 100));
-      
-      // Fallback a Kling
-      selectedModel = "fal-ai/kling-video";
-      try {
-        console.log(`[falai] Intentando modelo: ${selectedModel}`);
-        result = await fal.subscribe("fal-ai/kling-video", {
-            input: {
+    let submitRes = await fetch(`https://queue.fal.run/${selectedModel}`, {
+        method: "POST",
+        headers: {
+            "Authorization": `Key ${apiKey}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            prompt: opts.prompt,
+            aspect_ratio: opts.aspectRatio ?? "16:9"
+        })
+    });
+
+    if (!submitRes.ok) {
+        console.warn(`[falai] ${selectedModel} falló:`, await submitRes.text());
+        selectedModel = "fal-ai/kling-video";
+        submitRes = await fetch(`https://queue.fal.run/${selectedModel}`, {
+            method: "POST",
+            headers: {
+                "Authorization": `Key ${apiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
                 prompt: opts.prompt,
-                aspect_ratio: opts.aspectRatio ?? "16:9",
-            },
-            logs: true,
-            onQueueUpdate: (update) => {
-                if (update.status === "IN_PROGRESS") {
-                    update.logs.map((log) => log.message).forEach(console.log);
-                }
-            },
+                aspect_ratio: opts.aspectRatio ?? "16:9"
+            })
         });
-      } catch (err2: any) {
-        console.error(`[falai] Ambos modelos fallaron.`, err1, err2);
-        throw new Error(`Video generation no disponible. fal.ai error: ${String(err2).slice(0, 200)}`);
-      }
+
+        if (!submitRes.ok) {
+            throw new Error(`Video generation no disponible. fal.ai error: ${await submitRes.text()}`);
+        }
     }
 
-    const videoUrl = result.data?.video?.url || result.video?.url;
+    const submitData = await submitRes.json();
+    const statusUrl = submitData.status_url;
+    const responseUrl = submitData.response_url;
+    
+    if (!statusUrl || !responseUrl) {
+        throw new Error("fal.ai no devolvió status_url/response_url en la cola.");
+    }
+
+    result = await pollFalQueue(statusUrl, responseUrl);
+
+    const videoUrl = result.video?.url || result.data?.video?.url || result.url;
     if (!videoUrl) throw new Error(`FAL video no devolvió URL (modelo: ${selectedModel}). Payload: ${JSON.stringify(result).slice(0, 200)}`);
 
     const videoRes = await fetch(videoUrl);
@@ -131,7 +164,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
     
     return {
         buffer: Buffer.from(await videoRes.arrayBuffer()),
-        jobId: result.requestId || "fal-job-" + Date.now()
+        jobId: submitData.request_id || "fal-job-" + Date.now()
     };
 
   } catch (error) {
@@ -140,7 +173,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
   }
 }
 
-// Wrapper para mantener compatibilidad con donde se usaba HiggsfieldTracked
+// Wrapper para mantener compatibilidad
 export async function generateVideoTracked(opts: GenerateVideoOptions): Promise<{ buffer: Buffer; jobId: string }> {
     return generateVideo(opts);
 }

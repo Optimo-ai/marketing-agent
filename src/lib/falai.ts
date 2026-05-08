@@ -114,7 +114,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
 
   try {
     let result: any;
-    let selectedModel = "fal-ai/kling-video/v1/standard/text-to-video";
+    let selectedModel = "fal-ai/luma-dream-machine";
     let submitRes = await fetch(`https://queue.fal.run/${selectedModel}`, {
         method: "POST",
         headers: {
@@ -123,8 +123,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
         },
         body: JSON.stringify({
             prompt: opts.prompt,
-            aspect_ratio: opts.aspectRatio ?? "16:9",
-            duration: opts.duration ?? "5"
+            aspect_ratio: opts.aspectRatio ?? "16:9"
         })
     });
 
@@ -144,7 +143,24 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
         });
 
         if (!submitRes.ok) {
-            throw new Error(`Video generation no disponible. fal.ai error: ${await submitRes.text()}`);
+            console.warn(`[falai] ${selectedModel} falló:`, await submitRes.text());
+            selectedModel = "fal-ai/kling-video/v1/standard/text-to-video";
+            submitRes = await fetch(`https://queue.fal.run/${selectedModel}`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Key ${apiKey}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    prompt: opts.prompt,
+                    aspect_ratio: opts.aspectRatio ?? "16:9",
+                    duration: opts.duration ?? "5"
+                })
+            });
+            
+            if (!submitRes.ok) {
+                throw new Error(`Video generation no disponible. fal.ai error: ${await submitRes.text()}`);
+            }
         }
     }
 

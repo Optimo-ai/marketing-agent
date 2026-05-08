@@ -14,6 +14,7 @@ Return: JSON object only.`,
 
   calendar: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
 Each post: {id:number, name:string, format:string, project:string, platforms:[], week:1-4, suggestedDay:string, contentDirection:string, mediaNeeded:string, keyword:string|null}
+CRITICAL RULE: You MUST maximize the use of "Carousel" and "Reel" formats. Generate at least 80% Carousels and Reels. Avoid "Foto" or "Post" unless strictly necessary.
 Return: JSON array only.`,
 
   copy: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.

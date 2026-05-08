@@ -1068,7 +1068,16 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ posts }),
       })
-      const data = await res.json()
+      
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Error en servidor (${res.status}): ${text.slice(0, 100)}`);
+      }
+      
+      if (!res.ok) throw new Error(data?.error || `Error HTTP: ${res.status}`);
       if (data.error) throw new Error(data.error)
       setAiMediaItems(data.items ?? [])
       setAiMediaErrors(data.errors ?? [])
@@ -1095,7 +1104,16 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ posts: [postFromCal] }),
       })
-      const data = await res.json()
+      
+      let data;
+      const text = await res.text();
+      try {
+        data = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Error en servidor (${res.status}): ${text.slice(0, 100)}`);
+      }
+      
+      if (!res.ok) throw new Error(data?.error || `Error HTTP: ${res.status}`);
       if (data.error) throw new Error(data.error)
       if (data.items?.[0]) {
         const newItem = data.items[0]

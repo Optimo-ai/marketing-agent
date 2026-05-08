@@ -4,6 +4,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+
+export const maxDuration = 300;
 import { createScheduledPost, getSocialAccounts, getLocationUsers } from '@/lib/ghl'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })

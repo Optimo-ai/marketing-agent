@@ -6,6 +6,9 @@
 // Devuelve data URLs para preview (no sube a GHL hasta que el usuario apruebe).
 
 import { NextRequest, NextResponse } from 'next/server'
+
+export const maxDuration = 300;
+
 import { runSkill, parseJSON } from '@/lib/claude'
 import { detectBrand, BRAND_CONFIGS } from '@/lib/brandConfig'
 import {

@@ -5,6 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { detectBrand } from '@/lib/brandConfig'
+
+export const maxDuration = 300;
 import { renderImage } from '@/lib/imageRenderer'
 import { markManyAsUsed } from '@/lib/usedImages'
 

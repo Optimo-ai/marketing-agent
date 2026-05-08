@@ -30,11 +30,16 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   const { prompt, width, height } = opts
   console.log(`[falai] Generando imagen (${width}x${height}):`, prompt.slice(0, 50) + "...")
 
+  let imageSizeParam: any = { width, height };
+  if (width === 1280 && height === 720) imageSizeParam = "landscape_16_9";
+  else if (width === 768 && height === 1344) imageSizeParam = "portrait_9_16";
+  else if (width === 1024 && height === 1024) imageSizeParam = "square_hd";
+
   try {
     const result: any = await fal.subscribe("fal-ai/flux/schnell", {
         input: {
             prompt: prompt,
-            image_size: { width, height },
+            image_size: imageSizeParam,
             num_inference_steps: Math.min(opts.numInferenceSteps ?? 4, 4),
             num_images: 1,
             enable_safety_checker: false,
@@ -48,8 +53,8 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
         },
     });
 
-    const imageUrl = result.data?.images?.[0]?.url;
-    if (!imageUrl) throw new Error('fal.ai no devolvió URL de imagen');
+    const imageUrl = result.data?.images?.[0]?.url || result.images?.[0]?.url;
+    if (!imageUrl) throw new Error(`fal.ai no devolvió URL de imagen. Payload: ${JSON.stringify(result).slice(0, 200)}`);
 
     const imgRes = await fetch(imageUrl);
     if (!imgRes.ok) throw new Error('No se pudo descargar la imagen de fal.ai');
@@ -119,7 +124,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
     }
 
     const videoUrl = result.data?.video?.url || result.video?.url;
-    if (!videoUrl) throw new Error(`FAL video no devolvió URL (modelo: ${selectedModel})`);
+    if (!videoUrl) throw new Error(`FAL video no devolvió URL (modelo: ${selectedModel}). Payload: ${JSON.stringify(result).slice(0, 200)}`);
 
     const videoRes = await fetch(videoUrl);
     if (!videoRes.ok) throw new Error(`No se pudo descargar el video (status: ${videoRes.status})`);

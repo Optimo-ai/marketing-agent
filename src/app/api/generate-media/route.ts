@@ -264,9 +264,11 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
             //   slide 1 (Negro): punto clave del proyecto
             //   slide 2 (Foto): visual limpio, sin título
             //   slide 3 (Negro+website): CTA breve
+            // Limpiar la palabra "slide" del contenido
+            const cleanContentDir = contentDir.replace(/slide/gi, 'post').replace(/slides/gi, 'posts')
             const slideTexts = [
-              { title: postName,                       body: contentDir.slice(0, 55) },
-              { title: contentDir.slice(0, 50),        body: '' },
+              { title: postName,                       body: cleanContentDir.slice(0, 55) },
+              { title: cleanContentDir.slice(0, 50),   body: '' },
               { title: '',                             body: '' },
               { title: config.displayName.toUpperCase(), body: '' },
             ]

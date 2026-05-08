@@ -75,26 +75,47 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
   console.log(`[falai] Generando video (aspect: ${opts.aspectRatio || '16:9'}):`, opts.prompt.slice(0, 50) + "...");
 
   try {
-    // Usamos Kling V1.5 para video de alta calidad
-    const result: any = await fal.subscribe("fal-ai/kling-video/v1.5/standard/text-to-video", {
-        input: {
-            prompt: opts.prompt,
-            aspect_ratio: opts.aspectRatio ?? "16:9",
-            duration: opts.duration ?? "5", 
-        },
-        logs: true,
-        onQueueUpdate: (update) => {
-            if (update.status === "IN_PROGRESS") {
-                update.logs.map((log) => log.message).forEach(console.log);
-            }
-        },
-    });
+    // Intentar con Luma Dream Machine primero (más confiable)
+    // Si falla, caer a Kling como fallback
+    let result: any;
+    let selectedModel = "fal-ai/luma-dream-machine";
+    
+    try {
+      result = await fal.subscribe("fal-ai/luma-dream-machine", {
+          input: {
+              prompt: opts.prompt,
+              aspect_ratio: opts.aspectRatio ?? "16:9",
+          },
+          logs: true,
+          onQueueUpdate: (update) => {
+              if (update.status === "IN_PROGRESS") {
+                  update.logs.map((log) => log.message).forEach(console.log);
+              }
+          },
+      });
+    } catch (lumErr: any) {
+      console.warn("[falai] Luma Dream Machine falló, intentando Kling...", String(lumErr).slice(0, 100));
+      selectedModel = "fal-ai/kling-video";
+      result = await fal.subscribe("fal-ai/kling-video", {
+          input: {
+              prompt: opts.prompt,
+              aspect_ratio: opts.aspectRatio ?? "16:9",
+              duration: opts.duration ?? "5",
+          },
+          logs: true,
+          onQueueUpdate: (update) => {
+              if (update.status === "IN_PROGRESS") {
+                  update.logs.map((log) => log.message).forEach(console.log);
+              }
+          },
+      });
+    }
 
-    const videoUrl = result.data?.video?.url;
-    if (!videoUrl) throw new Error('fal.ai no devolvió URL de video');
+    const videoUrl = result.data?.video?.url || result.video?.url;
+    if (!videoUrl) throw new Error(`FAL video no devolvió URL (modelo: ${selectedModel})`);
 
     const videoRes = await fetch(videoUrl);
-    if (!videoRes.ok) throw new Error('No se pudo descargar el video de fal.ai');
+    if (!videoRes.ok) throw new Error(`No se pudo descargar el video (status: ${videoRes.status})`);
     
     return {
         buffer: Buffer.from(await videoRes.arrayBuffer()),

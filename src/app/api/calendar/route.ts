@@ -13,8 +13,14 @@ export async function POST(req: NextRequest) {
       if (!month || !year || !briefing) {
         return NextResponse.json({ error: 'Faltan datos (month, year, briefing)' }, { status: 400 })
       }
-      const prompt = `Genera el calendario de contenido para ${month} ${year}.
-Aquí tienes el Briefing Mensual aprobado como contexto:
+      
+      // Incluir la fecha actual para que Claude no genere posts en fechas pasadas
+      const today = new Date().toISOString().slice(0, 10)
+      
+      const prompt = `Today's date: ${today}. Do NOT generate any posts with suggestedDay before today.
+
+Generate the content calendar for ${month} ${year}.
+Here is the approved Monthly Brief as context:
 
 ${typeof briefing === 'string' ? briefing : JSON.stringify(briefing, null, 2)}`
 

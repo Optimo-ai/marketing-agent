@@ -35,6 +35,16 @@ Return: JSON array of 3 objects only.`,
 Generate N distinct image prompts for carousel slides. Each prompt: architectural, cinematic, NO PEOPLE.
 Return: JSON array of strings only. Example: ["prompt 1", "prompt 2"]`,
 
+  carouselText: `RESPOND WITH ONLY JSON. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
+Given a content direction, generate text for a 4-slide carousel.
+MINIMALIST STYLE: STRICTLY ONE SHORT LINE PER SLIDE. No paragraphs, no extra sentences.
+The carousel pattern is Photo, Black, Photo, Black.
+- Slide 1 (Photo): ONE minimalist headline (title). Max 5 words.
+- Slide 2 (Black): ONE short minimalist phrase (body). Max 8 words.
+- Slide 3 (Photo): ONE short minimalist phrase (title). Max 5 words.
+- Slide 4 (Black): ONE short Call to Action (CTA) (body). Max 5 words. The website will be added automatically.
+Return: {slide1_title: string, slide2_body: string, slide3_title: string, slide4_body: string} only.`,
+
   avatarScript: `RESPOND WITH ONLY JSON. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
 Write Sofia's 15-second script (35-45 words, conversational, hook+CTA) + Spanish subtitles (3-5 lines).
 Return: {script_en:string, subtitles_es:array} only.`,
@@ -116,6 +126,7 @@ export async function runSkill(
               : skill === 'imagePrompt'     ? 300
               : skill === 'videoPrompt'     ? 400
               : skill === 'carouselPrompts' ? 800
+              : skill === 'carouselText'    ? 800
               : skill === 'avatarScript'    ? 600
               : skill === 'editCopy'        ? 1500
               : skill === 'report'          ? 4096

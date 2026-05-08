@@ -286,9 +286,8 @@ export async function renderImage(input: RenderInput): Promise<RenderOutput> {
 
     // Línea de apoyo
     if (input.body) {
-      anchorY += 6
-      drawCentered(ctx, input.body.slice(0, 60), anchorY, SIZE_BODY, w)
-      anchorY += SIZE_BODY + 12
+      anchorY += 10
+      anchorY += wrapCentered(ctx, input.body, anchorY, SIZE_BODY, w, maxTextW)
     }
 
     // Divisor inferior

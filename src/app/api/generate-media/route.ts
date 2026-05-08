@@ -244,14 +244,13 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
 
           // ── CAROUSEL ────────────────────────────────────────────────────────
           } else if (isCarousel) {
-            // Step 1: Claude genera 2 prompts — uno por cada slide de FOTO
+            // Step 1: Claude genera los prompts para las imágenes
             const claudeInput = `Brand: ${config.displayName}
 Brand visual DNA: ${config.aiPromptBase}
 Project: ${post.project ?? ''}
 Format: portrait 1080x1350px
 Content direction: ${contentDir}
 Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
-
             const rawSlidePrompts = await runSkill('carouselPrompts', claudeInput)
             let photoPrompts: string[] = []
             try {
@@ -264,7 +263,22 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
             while (photoPrompts.length < CAROUSEL_PHOTO_SLIDES) photoPrompts.push(photoPrompts[0])
             photoPrompts = photoPrompts.slice(0, CAROUSEL_PHOTO_SLIDES)
 
-            // Step 2: Higgsfield genera solo las 2 imágenes de foto
+            // Step 2: Claude genera el texto para los slides
+            const textInput = `Content Direction: ${contentDir}\nBrand: ${config.displayName}\nWebsite: noriegagroup.com`
+            const rawTextData = await runSkill('carouselText', textInput)
+            const slideCopy = parseJSON<{
+              slide1_title: string;
+              slide2_body: string;
+              slide3_title: string;
+              slide4_body: string;
+            }> (rawTextData, {
+              slide1_title: postName.split(' ').slice(0, 4).join(' '),
+              slide2_body: 'Descubre la exclusividad.',
+              slide3_title: config.displayName,
+              slide4_body: 'Visita nuestro sitio web.'
+            })
+
+            // Step 3: Fal AI genera las imágenes de foto
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
             const photoResults = await Promise.all(
               photoPrompts.map(p => generateAnyImage(p, aspectRatio))
@@ -272,17 +286,12 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
             const photoBuffers = photoResults.map(r => r.buffer)
             const carouselJobIds = photoResults.map(r => r.jobId).filter(Boolean) as string[]
 
-            // Step 3: Renderizar los 4 slides según patrón Foto→Negro→Foto→Negro
-            // Copies de texto por slide:
-            //   slide 0 (Foto+logo): postName como título
-            //   slide 1 (Negro): brand name
-            //   slide 2 (Foto): visual limpio, sin título
-            //   slide 3 (Negro+website): CTA breve
+            // Step 4: Renderizar los 4 slides con el texto generado
             const slideTexts = [
-              { title: postName,                            body: '' },
-              { title: config.displayName,                  body: '' },
-              { title: '',                                  body: '' },
-              { title: config.displayName.toUpperCase(),    body: '' },
+              { title: slideCopy.slide1_title, body: '' },
+              { title: '',                     body: slideCopy.slide2_body },
+              { title: slideCopy.slide3_title, body: '' },
+              { title: '',                     body: slideCopy.slide4_body },
             ]
 
             let photoIdx = 0
@@ -293,7 +302,7 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
                   brand,
                   format: renderFormat,
                   title:  slideTexts[idx].title,
-                  body:   slideTexts[idx].body || undefined,
+                  body:   slideTexts[idx].body,
                   sourceImageBuffer: imgBuf,
                   logoBuffer,
                   outputFormat: 'jpg',

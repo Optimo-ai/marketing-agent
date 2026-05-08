@@ -25,14 +25,20 @@ Here is the approved Monthly Brief as context:
 ${typeof briefing === 'string' ? briefing : JSON.stringify(briefing, null, 2)}`
 
       const raw = await runSkill('calendar', prompt, false)
-      console.log('[calendar] Raw response from Claude (first 500 chars):', raw.slice(0, 500))
+      console.log('[calendar] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let generatedCalendar: any
       try {
         generatedCalendar = parseJSON(raw)
+        if (!Array.isArray(generatedCalendar)) {
+          throw new Error('Expected array, got ' + typeof generatedCalendar)
+        }
       } catch (parseErr: any) {
         console.error('[calendar] parseJSON failed:', parseErr.message)
-        console.error('[calendar] Raw text (last 500 chars):', raw.slice(-500))
-        throw new Error(`Claude generó un formato inválido: ${parseErr.message}`)
+        console.error('[calendar] Full raw text:', raw)
+        return NextResponse.json(
+          { error: `Claude generó formato inválido: ${parseErr.message}. Raw: ${raw.slice(0, 200)}` },
+          { status: 400 }
+        )
       }
       return NextResponse.json({ calendar: generatedCalendar })
     }

@@ -32,14 +32,20 @@ export async function POST(req: NextRequest) {
       const today = new Date().toISOString().slice(0, 10)
       const prompt = `Today's date: ${today}. Month to schedule: ${month} ${year}.\nDo NOT assign any scheduledDate before ${today}. Posts for past dates must be scheduled starting from today onward.\n\n${JSON.stringify(copyData, null, 2)}`
       const raw = await runSkill('schedule', prompt, false)
-      console.log('[schedule] Raw response from Claude (first 500 chars):', raw.slice(0, 500))
+      console.log('[schedule] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let generatedSchedule: any
       try {
         generatedSchedule = parseJSON(raw)
+        if (!Array.isArray(generatedSchedule)) {
+          throw new Error('Expected array, got ' + typeof generatedSchedule)
+        }
       } catch (parseErr: any) {
         console.error('[schedule] parseJSON failed:', parseErr.message)
-        console.error('[schedule] Raw text (last 500 chars):', raw.slice(-500))
-        throw new Error(`Claude generó un formato inválido: ${parseErr.message}`)
+        console.error('[schedule] Full raw text:', raw)
+        return NextResponse.json(
+          { error: `Claude generó formato inválido: ${parseErr.message}. Raw: ${raw.slice(0, 200)}` },
+          { status: 400 }
+        )
       }
       return NextResponse.json({ schedule: generatedSchedule })
     }

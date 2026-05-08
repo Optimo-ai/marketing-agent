@@ -418,12 +418,19 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ month: currentMonth, year: currentYear, action: 'generate', briefing }),
       })
+      if (!res.ok) {
+        const errorData = await res.text()
+        console.error('Calendar API error:', errorData)
+        throw new Error(`HTTP ${res.status}: ${errorData.slice(0, 200)}`)
+      }
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      if (!Array.isArray(data.calendar)) throw new Error('La respuesta no es un array válido')
       setCalendar(data.calendar)
-      showToast(`${data.calendar.length} posts generados`)
+      showToast(`✓ ${data.calendar.length} posts generados`)
     } catch (e: unknown) {
-      showToast('Error: ' + String(e))
+      console.error('generateCalendar error:', e)
+      showToast('Error generando calendario: ' + String(e).slice(0, 150))
     } finally {
       setLoading(false)
     }
@@ -467,17 +474,23 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           month: currentMonth, year: currentYear, action: 'generate',
-          // Pasar el calendario completo para que Claude tenga format, platforms, contentDirection
           calendar: calendar.filter((_, i) => !rejectedPosts.has(i)),
         }),
       })
+      if (!res.ok) {
+        const errorData = await res.text()
+        console.error('Copy API error:', errorData)
+        throw new Error(`HTTP ${res.status}: ${errorData.slice(0, 200)}`)
+      }
       const data = await res.json()
       if (data.error) throw new Error(data.error)
+      if (!Array.isArray(data.copy)) throw new Error('La respuesta no es un array válido')
       setCopyData(data.copy)
       if (data.boardId) setBoardId(data.boardId)
-      showToast(`Copy generado para ${data.copy.length} posts`)
+      showToast(`✓ Copy generado para ${data.copy.length} posts`)
     } catch (e: unknown) {
-      showToast('Error: ' + String(e))
+      console.error('generateCopy error:', e)
+      showToast('Error generando copy: ' + String(e).slice(0, 150))
     } finally {
       setLoading(false)
     }

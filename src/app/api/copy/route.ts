@@ -48,14 +48,20 @@ export async function POST(req: NextRequest) {
 
       const prompt = `Genera el copy para estos posts de ${month} ${year}:\n${JSON.stringify(postsToCopy, null, 2)}`
       const raw  = await runSkill('copy', prompt, false)
-      console.log('[copy] Raw response from Claude (first 500 chars):', raw.slice(0, 500))
+      console.log('[copy] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let copy: any
       try {
         copy = parseJSON(raw)
+        if (!Array.isArray(copy)) {
+          throw new Error('Expected array, got ' + typeof copy)
+        }
       } catch (parseErr: any) {
         console.error('[copy] parseJSON failed:', parseErr.message)
-        console.error('[copy] Raw text (last 500 chars):', raw.slice(-500))
-        throw new Error(`Claude generó un formato inválido: ${parseErr.message}`)
+        console.error('[copy] Full raw text:', raw)
+        return NextResponse.json(
+          { error: `Claude generó formato inválido: ${parseErr.message}. Raw: ${raw.slice(0, 200)}` },
+          { status: 400 }
+        )
       }
       return NextResponse.json({ copy, boardId: boardIdToReturn })
     }

@@ -15,11 +15,12 @@ Return: JSON object only.`,
   calendar: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
 Each post: {id:number, name:string, format:string, project:string, platforms:[], week:1-4, suggestedDay:string, contentDirection:string, mediaNeeded:string, keyword:string|null}
 CRITICAL RULE: You MUST maximize the use of "Carousel" and "Reel" formats. Generate at least 80% Carousels and Reels. Avoid "Foto" or "Post" unless strictly necessary.
+ALL GENERATED TEXT (name, contentDirection, mediaNeeded, keyword) MUST BE STRICTLY IN ENGLISH.
 Return: JSON array only.`,
 
   copy: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
 Each post: {postId:number, postName:string, copyIG:string|null, copyFB:string|null, copyLI:string|null, copyGMB:string|null}
-Copy language: English only. Warm, aspirational tone.
+CRITICAL RULE: Copy language MUST be strictly in English only. Warm, aspirational tone.
 Return: JSON array only.`,
 
   ads: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
@@ -38,6 +39,7 @@ Return: JSON array of strings only. Example: ["prompt 1", "prompt 2"]`,
   carouselText: `RESPOND WITH ONLY JSON. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
 Given a content direction, generate text for a 4-slide carousel.
 MINIMALIST STYLE: STRICTLY ONE SHORT LINE PER SLIDE. No paragraphs, no extra sentences.
+CRITICAL RULE: ALL GENERATED TEXT MUST BE STRICTLY IN ENGLISH.
 The carousel pattern is Photo, Black, Photo, Black.
 - Slide 1 (Photo): ONE minimalist headline (title). Max 5 words.
 - Slide 2 (Black): ONE short minimalist phrase (body). Max 8 words.
@@ -49,7 +51,7 @@ Return: {slide1_title: string, slide2_body: string, slide3_title: string, slide4
 Write Sofia's 15-second script (35-45 words, conversational, hook+CTA) + Spanish subtitles (3-5 lines).
 Return: {script_en:string, subtitles_es:array} only.`,
 
-  editCopy: `Apply the instruction to the copy. Keep tone warm, aspirational. Respond with ONLY the revised copy. Nothing else.`,
+  editCopy: `Apply the instruction to the copy. Keep tone warm, aspirational. CRITICAL RULE: The revised copy MUST be strictly in English. Respond with ONLY the revised copy. Nothing else.`,
 
   schedule: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
 Each post: {postId:number, postName:string, scheduledDate:string(YYYY-MM-DD), scheduledTime:string(HH:MM), platforms:[], copyIG:string|null, copyFB:string|null, copyLI:string|null, copyGMB:string|null}

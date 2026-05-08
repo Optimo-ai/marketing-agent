@@ -273,10 +273,8 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
               slide4_body: string;
             }> (rawTextData, {
               slide1_title: postName.split(' ').slice(0, 4).join(' '),
-              slide2_body: 'Descubre la exclusividad.',
-              slide3_title: config.displayName,
-              slide4_body: 'Visita nuestro sitio web.'
-            })
+              slide2_body: 'Donfig.displayName,
+              slide4_body: 'Visit our website.'
 
             // Step 3: Fal AI genera las imágenes de foto
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)

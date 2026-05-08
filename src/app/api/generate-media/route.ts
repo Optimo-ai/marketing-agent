@@ -8,13 +8,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runSkill, parseJSON } from '@/lib/claude'
 import { detectBrand, BRAND_CONFIGS } from '@/lib/brandConfig'
-import { generateImage as generateFalImage } from '@/lib/falai'
 import {
-  generateVideoTracked,
-  generateImageTracked,
-  generateAvatarVideo,
-  VideoStyle,
-} from '@/lib/higgsfield'
+  generateImage,
+  generateVideoTracked
+} from '@/lib/falai'
 import { renderImage, renderCarouselSlide } from '@/lib/imageRenderer'
 import { processVideo } from '@/lib/videoProcessor'
 
@@ -27,6 +24,7 @@ const CINEMATIC_KEYWORDS = ['aerial', 'drone', 'building', 'facade', 'architectu
 const LIFESTYLE_KEYWORDS  = ['family', 'couple', 'people', 'lifestyle', 'amenity', 'pool', 'terrace', 'rooftop', 'tour', 'walk', 'interior', 'resident', 'living', 'experience', 'enjoying']
 
 // Avatar → Lifestyle → Cinematic por semana → Creative
+export type VideoStyle = 'cinematic' | 'lifestyle' | 'avatar' | 'creative';
 const WEEK_STYLE_ROTATION: VideoStyle[] = ['cinematic', 'lifestyle', 'avatar', 'creative']
 
 function detectVideoStyle(contentDir: string, week: number): VideoStyle {
@@ -67,30 +65,18 @@ function mapAspectRatio(w: number, h: number): {
   return                   { aspectRatio: '1:1',  width: 1024, height: 1024 }
 }
 
-// Genera imagen — Higgsfield primario, fal.ai como respaldo (sin Pollinations)
+// Genera imagen — usando fal.ai
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
 ): Promise<{ buffer: Buffer; jobId?: string }> {
   try {
-    const result = await generateImageTracked({ prompt, aspectRatio })
-    return result
+    const { width, height } = aspectRatio === '16:9' ? { width: 1280, height: 720 } : aspectRatio === '9:16' ? { width: 768, height: 1344 } : { width: 1024, height: 1024 }
+    const buffer = await generateImage({ prompt, width, height })
+    return { buffer, jobId: "fal-flux-" + Date.now() }
   } catch (err: any) {
     const msg = String(err?.message ?? err)
-    // Solo usar fal.ai si Higgsfield tuvo error de red/servidor (no auth)
-    const isNetworkError = msg.includes('522') || msg.includes('521') || msg.includes('523')
-      || msg.includes('timed out') || msg.includes('timeout') || msg.includes('ECONNREFUSED')
-      || msg.includes('fetch failed') || msg.includes('network')
-    if (isNetworkError) {
-      console.warn(`[generate-media] Higgsfield caído (${msg.slice(0, 80)}), usando fal.ai`)
-      // Dimensiones según aspect ratio
-      const dim = aspectRatio === '16:9' ? { width: 1280, height: 720 }
-                : aspectRatio === '9:16' ? { width: 768,  height: 1344 }
-                :                          { width: 1024, height: 1024 }
-      const buffer = await generateFalImage({ prompt, ...dim, numInferenceSteps: 4 })
-      return { buffer }
-    }
-    throw err  // auth errors, bad model names, etc. → fail clearly
+    throw err
   }
 }
 
@@ -141,35 +127,7 @@ export async function POST(req: NextRequest) {
             let higgsfieldJobId: string | undefined
             let subtitleLines: string[] = []
 
-            // ── AVATAR (Sofia hablando en inglés) ─────────────────────────
-            if (videoStyle === 'avatar') {
-              try {
-                // Claude genera guión en inglés + subtítulos en español
-                const scriptInput = `Brand: ${config.displayName}
-Project: ${post.project ?? ''}
-Content direction: ${contentDir}`
-
-                const rawScript = await runSkill('avatarScript', scriptInput)
-                const scriptData = parseJSON<{ script_en: string; subtitles_es: string[] }>(rawScript)
-                subtitleLines = scriptData.subtitles_es ?? []
-
-                const result = await generateAvatarVideo({
-                  script:      scriptData.script_en,
-                  aspectRatio: '9:16',
-                  duration:    15,
-                  resolution:  '720p',
-                  mode:        'ugc',
-                })
-                videoBuffer     = result.buffer
-                higgsfieldJobId = result.jobId
-                isRealVideo     = true
-                console.log(`[generate-media] Avatar video 15s listo para "${postName}"`)
-              } catch (avErr) {
-                console.warn(`[generate-media] Avatar video falló, fallback a cinematic:`, String(avErr).slice(0, 120))
-              }
-            }
-
-            // ── CINEMATIC / LIFESTYLE / CREATIVE ─────────────────────────
+            // ── CINEMATIC / LIFESTYLE / CREATIVE (Avatar now falls back to lifestyle) ──
             // Reels → portrait 9:16; other video → landscape 16:9
             const isReel = (postFormat ?? '').toLowerCase().includes('reel')
             const videoAspect: '9:16' | '16:9' = isReel ? '9:16' : '16:9'
@@ -188,14 +146,12 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
               const result = await generateVideoTracked({
                 prompt:      cleanPrompt,
                 aspectRatio: videoAspect,
-                duration:    15,
-                resolution:  '720p',
-                videoStyle:  videoStyle === 'avatar' ? 'lifestyle' : videoStyle,
+                duration:    '5', // Kling uses 5 by default, updated from 15
               })
               videoBuffer     = result.buffer
               higgsfieldJobId = result.jobId
               isRealVideo     = true
-              console.log(`[generate-media] Video 15s (${videoStyle} ${videoAspect}) listo para "${postName}"`)
+              console.log(`[generate-media] Video 5s (${videoStyle} ${videoAspect}) listo para "${postName}"`)
             }
 
             // If Higgsfield video fails, generate a static image thumbnail instead

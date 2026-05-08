@@ -114,7 +114,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
 
   try {
     let result: any;
-    let selectedModel = "fal-ai/luma-dream-machine";
+    let selectedModel = "fal-ai/kling-video/v1/standard/text-to-video";
     let submitRes = await fetch(`https://queue.fal.run/${selectedModel}`, {
         method: "POST",
         headers: {
@@ -123,13 +123,14 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
         },
         body: JSON.stringify({
             prompt: opts.prompt,
-            aspect_ratio: opts.aspectRatio ?? "16:9"
+            aspect_ratio: opts.aspectRatio ?? "16:9",
+            duration: opts.duration ?? "5"
         })
     });
 
     if (!submitRes.ok) {
         console.warn(`[falai] ${selectedModel} falló:`, await submitRes.text());
-        selectedModel = "fal-ai/kling-video";
+        selectedModel = "fal-ai/luma-dream-machine/ray-2";
         submitRes = await fetch(`https://queue.fal.run/${selectedModel}`, {
             method: "POST",
             headers: {

@@ -2802,9 +2802,11 @@ export default function Home() {
                             </div>
 
                             {/* Prompt generado por Claude */}
-                            <div style={{fontSize:9,color:'var(--text3)',background:'var(--surface2)',padding:'5px 7px',borderRadius:4,marginBottom:10,lineHeight:1.5,fontStyle:'italic'}}>
-                              "{item.prompt.slice(0, 130)}{item.prompt.length > 130 ? '...' : ''}"
-                            </div>
+                            {item.prompt && (
+                              <div style={{fontSize:9,color:'var(--text3)',background:'var(--surface2)',padding:'5px 7px',borderRadius:4,marginBottom:10,lineHeight:1.5,fontStyle:'italic'}}>
+                                "{item.prompt.slice(0, 130)}{item.prompt.length > 130 ? '...' : ''}"
+                              </div>
+                            )}
 
                             {/* Acciones */}
                             <div style={{display:'flex',gap:6}}>

@@ -40,67 +40,19 @@ Respond ONLY with this JSON — no markdown, no extra text:
   "insightsClave": ["exactly 5 items, max 15 words each — specific and actionable"]
 }`,
 
-  calendar: `You are the content calendar generator for Noriega Group social media agent.
-You receive a briefing and must generate a monthly content calendar.
+  calendar: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
+Each post: {id:number, name:string, format:string, project:string, platforms:[], week:1-4, suggestedDay:string, contentDirection:string, mediaNeeded:string, keyword:string|null}
+Return: JSON array only.`,
 
-OUTPUT RULE: Respond with ONLY a valid JSON array. No markdown, no text, nothing else.
+  copy: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
+Each post: {postId:number, postName:string, copyIG:string|null, copyFB:string|null, copyLI:string|null, copyGMB:string|null}
+Copy language: English only. Warm, aspirational tone.
+Return: JSON array only.`,
 
-Each post must have: id (number), name (string), format (Carousel/Reel/Foto/Story/Lead Magnet), project (KASA/Arko/Aria/General), platforms (array of IG/FB/LI/GMB), week (1-4), suggestedDay (Monday-Sunday), contentDirection (string), mediaNeeded (string), keyword (string or null)
-
-Distribution: 40% Carousel, 35% Reel, 15% Foto, 10% Story+Lead Magnet.
-
-All content must be in English. All suggestedDay values must be valid day names. Do not suggest past dates.
-
-Generate the calendar now as a JSON array only.`,
-
-  copy: `You are running Phase 4 of the Noriega Group social media agent.
-You receive a list of approved posts and write platform-specific copy for each.
-ALL copy must be written in ENGLISH only.
-
-Brand voice:
-- Tone: Professional but warm. Aspirational without being arrogant. Trustworthy.
-- Language: English only across all platforms.
-- CTA style: "DM us", "Book a tour", "Link in bio", "Schedule a visit", "Get more info"
-- Hashtags: 10-15 for IG. 3-5 for FB. 3-5 professional for LinkedIn.
-
-Platform rules:
-- Instagram: 100-300 words, hook first line, story → details → CTA, 10-15 hashtags in English
-- Facebook: 50-150 words, conversational, 3-5 hashtags, WhatsApp or DM CTA
-- LinkedIn: 150-300 words, investor/ROI angle, business tone, English
-- GMB: 100-300 words, local SEO, project name + location (Downtown Punta Cana / Vista Cana) + contact
-- Lead Magnet: hook + tease 3 bullets + Comment KEYWORD CTA
-
-For each post, respond with a JSON array. Each object has:
-postId (number), postName (string), copyIG (string or null), copyFB (string or null), copyLI (string or null), copyGMB (string or null)
-
-Respond ONLY with valid JSON array. No markdown, no extra text.`,
-
-  ads: `You are a senior paid media creative director for Noriega Group, a luxury real estate developer in Dominican Republic.
-You receive an image (base64) and a creative idea/message the client wants to transmit.
-
-Your job: analyze the image visually and generate 3 ad copy variations optimized for paid social (Meta/Instagram).
-
-For each variation respond with:
-- hook: first line that stops the scroll (max 8 words, punchy)
-- headline: main message (max 10 words)
-- body: supporting copy (max 25 words, benefit-focused)
-- cta: call to action button text (max 4 words)
-- overlay: where to place text on the image — "bottom", "top", "center", "bottom-left", "bottom-right"
-- rationale: 1 sentence explaining the creative angle
-
-Brand voice: aspirational, trustworthy, warm. Spanish primary. Focus on lifestyle + ROI + Caribbean dream.
-Projects: KASA Punta Cana Residences | Arko Golf & Residences
-
-Respond ONLY with a JSON array of 3 variations — no markdown, no extra text:
-[{
-  "id": 1,
-  "hook": "string",
-  "headline": "string", 
-  "body": "string",
-  "cta": "string",
-  "overlay": "bottom|top|center|bottom-left|bottom-right",
-  "rationale": "string"
-}]`,
+  ads: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
+Each variation: {id:number, hook:string, headline:string, body:string, cta:string, overlay:string, rationale:string}
+Generate 3 ad variations. Hook: 8 words max. Headline: 10 words max. Body: 25 words max.
+Return: JSON array of 3 objects only.`,
 
   imagePrompt: `You are generating prompts for Higgsfield AI photorealistic image/video generation for Noriega Group luxury real estate marketing in Dominican Republic.
 
@@ -148,28 +100,9 @@ For 15-second videos: describe an ARC — opening scene, mid moment, closing rev
 NEVER include text, logos, watermarks, or UI elements.
 Respond with ONLY the prompt string — no explanation, no JSON, no quotes.`,
 
-  carouselPrompts: `You are generating image prompts for Higgsfield AI / fal.ai Flux for a real estate social media CAROUSEL for Noriega Group in Dominican Republic.
-
-You will receive:
-- Brand visual DNA: the established aesthetic, palette, and mood of the specific brand
-- Content direction: what this carousel should show or communicate
-- Format: image dimensions
-- Number of slides needed
-
-Your job: generate exactly the requested number of DISTINCT, cinematic image prompts — one per carousel image.
-
-Rules:
-- Image 1 (COVER): The strongest, most visually impactful scene. This is the scroll-stopper hook.
-- Middle images (CONTENT): Each shows a different space, amenity, or angle. Tell a different part of the story per image.
-- Last image (CTA): An inviting, aspirational wide exterior or lifestyle shot — feels like an invitation to live there.
-- Each prompt must be a fully self-contained scene description. No references to "previous" or "next".
-- Brand visual DNA must be present in EVERY prompt.
-- NO PEOPLE — never include any humans, residents, people, or figures. Only architecture and empty spaces
-- NEVER include text, logos, watermarks, UI elements, or the word "slide" in any prompt.
-- Do NOT mention "carousel", "image", or "gallery" — just describe what the scene visually shows.
-
-Respond ONLY with a JSON array of exactly N prompt strings — no markdown, no extra text:
-["prompt 1", "prompt 2", ...]`,
+  carouselPrompts: `RESPOND WITH ONLY JSON ARRAY OF STRINGS. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
+Generate N distinct image prompts for carousel slides. Each prompt: architectural, cinematic, NO PEOPLE.
+Return: JSON array of strings only. Example: ["prompt 1", "prompt 2"]`,
 
   avatarScript: `You are writing 15-second speaking scripts for "Sofia", the AI brand ambassador for Noriega Group — a luxury real estate developer in Dominican Republic with 35 years of experience.
 
@@ -207,39 +140,10 @@ Apply the instruction exactly. Keep brand voice: aspirational, warm, trustworthy
 Preserve hashtags and emojis unless told otherwise.
 Respond with ONLY the revised copy — no explanation, no label, no quotes.`,
 
-  schedule: `You are running Phase 5 of the Noriega Group social media agent.
-You receive a list of approved posts with their copy and generate an optimized posting schedule.
-
-CRITICAL DATE RULE: The message will include "Today's date: YYYY-MM-DD". You MUST NOT schedule any post before that date. All scheduledDate values must be on or after today's date, distributed forward through the month.
-
-Best posting times for Dominican Republic / Latin American audience (AST, UTC-4):
-- Instagram Feed: Mon, Wed, Fri at 8am, 12pm, 7pm
-- Instagram Stories: Daily at 8am, 1pm, 8pm
-- Facebook: Tue, Thu, Sat at 9am, 12pm, 6pm
-- LinkedIn: Tue, Wed, Thu at 9am, 12pm
-- GMB: Mon, Thu at 10am
-
-Rules:
-- Max 2 posts per day per platform
-- Stagger KASA and Arko (don't post same project twice same day)
-- Stories can be daily
-- Lead Magnet posts: always prime time (7pm or 8pm)
-- Distribute posts evenly from today's date through the end of the month
-
-Respond ONLY with a JSON array:
-[{
-  "postId": number,
-  "postName": "string",
-  "scheduledDate": "YYYY-MM-DD",
-  "scheduledTime": "HH:MM",
-  "platforms": ["IG","FB","LI","GMB"],
-  "copyIG": "string or null",
-  "copyFB": "string or null",
-  "copyLI": "string or null",
-  "copyGMB": "string or null"
-}]
-
-No markdown, no extra text. Only the JSON array.`,
+  schedule: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
+Each post: {postId:number, postName:string, scheduledDate:string(YYYY-MM-DD), scheduledTime:string(HH:MM), platforms:[], copyIG:string|null, copyFB:string|null, copyLI:string|null, copyGMB:string|null}
+CRITICAL: scheduledDate must be TODAY OR LATER ONLY. Never past dates.
+Return: JSON array only.`,
 
   report: `You are the marketing intelligence AI for Noriega Group, a luxury real estate developer in Dominican Republic (projects: KASA, Arko, Aria, Noriega Group General).
 
@@ -385,56 +289,83 @@ export async function runSkill(
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')
       .map(b => b.text)
       .join('')
+    
+    if (!text || text.trim().length === 0) {
+      throw new Error(`${skill}: Claude returned empty response`)
+    }
+    
     return text
   }
 
-  return await withExponentialBackoff(callAnthropic, 5, 1000)
+  try {
+    return await withExponentialBackoff(callAnthropic, 5, 1000)
+  } catch (error) {
+    console.error(`[runSkill] ${skill} failed:`, error)
+    throw new Error(`Failed to run skill ${skill}: ${String(error).slice(0, 100)}`)
+  }
 }
 
 export function parseJSON<T>(raw: string): T {
-  // 1. Strip markdown fences
-  let cleanStr = raw.replace(/```(?:json)?/gi, '').trim()
-
-  // 2. Extract the outermost JSON object or array
-  const match = cleanStr.match(/(\[[\s\S]*\]|\{[\s\S]*\})/)
-  if (match) cleanStr = match[0]
-
-  // 3. Fix trailing commas
-  cleanStr = cleanStr.replace(/,\s*([}\]])/g, '$1')
-
-  // 4. Try parsing as-is
   try {
-    return JSON.parse(cleanStr) as T
-  } catch (_) {
-    // 5. JSON likely truncated — attempt to close open structures
-    let depth = 0
-    let inString = false
-    let escaped = false
-    const opens: string[] = []
-    for (const ch of cleanStr) {
-      if (escaped)             { escaped = false; continue }
-      if (ch === '\\' && inString) { escaped = true; continue }
-      if (ch === '"')          { inString = !inString; continue }
-      if (inString)            continue
-      if (ch === '{' || ch === '[') opens.push(ch)
-      if (ch === '}' || ch === ']') opens.pop()
-    }
-    // Close any open string first
-    if (inString) cleanStr += '"'
-    // Remove trailing comma before we close
-    cleanStr = cleanStr.replace(/,\s*$/, '')
-    // Close open structures in reverse order
-    for (let i = opens.length - 1; i >= 0; i--) {
-      cleanStr += opens[i] === '{' ? '}' : ']'
-    }
-    // Fix trailing commas again after patching
-    cleanStr = cleanStr.replace(/,\s*([}\]])/g, '$1')
-
+    // Step 1: Remove markdown fences
+    let text = raw.replace(/```(?:json)?\s*/gi, '').trim()
+    
+    // Step 2: Try direct parse first
     try {
-      return JSON.parse(cleanStr) as T
-    } catch (err) {
-      console.error('[parseJSON] Failed even after repair. Last 300 chars:', cleanStr.slice(-300))
-      throw new Error('La IA generó un formato de datos incompleto o inválido. Intenta regenerarlo.')
+      return JSON.parse(text) as T
+    } catch (_) {}
+    
+    // Step 3: Find and extract JSON content more aggressively
+    // Look for the start of JSON ([ or {) and work backwards from the end
+    const firstBracket = Math.max(
+      text.lastIndexOf('[', text.length),
+      text.lastIndexOf('{', text.length)
+    )
+    
+    if (firstBracket === -1) {
+      throw new Error('No JSON found in response')
     }
+    
+    // Find matching closing bracket from the end
+    text = text.substring(firstBracket)
+    
+    // Step 4: Remove trailing garbage
+    text = text.replace(/[^\]}]\s*$/g, '') // Remove non-bracket trailing chars
+    
+    // Step 5: Try parse again
+    try {
+      return JSON.parse(text) as T
+    } catch (_) {}
+    
+    // Step 6: Auto-close any unclosed structures
+    let fixed = text
+    let openBraces = (fixed.match(/\{/g) || []).length
+    let closeBraces = (fixed.match(/\}/g) || []).length
+    let openBrackets = (fixed.match(/\[/g) || []).length
+    let closeBrackets = (fixed.match(/\]/g) || []).length
+    
+    while (openBraces > closeBraces) {
+      fixed += '}'
+      closeBraces++
+    }
+    while (openBrackets > closeBrackets) {
+      fixed += ']'
+      closeBrackets++
+    }
+    
+    // Step 7: Remove trailing commas
+    fixed = fixed.replace(/,\s*([}\]])/g, '$1')
+    
+    // Step 8: Try final parse
+    try {
+      return JSON.parse(fixed) as T
+    } catch (err) {
+      console.error('[parseJSON] Failed. Input (first 200 chars):', raw.slice(0, 200))
+      console.error('[parseJSON] After fixes (last 300 chars):', fixed.slice(-300))
+      throw new Error(`Failed to parse JSON: ${String(err).slice(0, 100)}`)
+    }
+  } catch (error) {
+    console.error('[parseJSON] Fatal error:', error)
+    throw error
   }
 }

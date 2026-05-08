@@ -2,7 +2,8 @@
 // Generación de imágenes y video usando fal.ai como motor principal.
 // Implementación 100% nativa con fetch (sin dependencias externas) para evitar errores de compilación.
 
-const apiKey = process.env.FAL_KEY || process.env.FAL_API_KEY;
+import { Buffer } from 'buffer';
+const apiKey = process.env.FAL_KEY || process.env.FAL_API_KEY || '';
 
 export interface GenerateImageOptions {
   prompt: string
@@ -22,7 +23,7 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   const { prompt, width, height } = opts
   console.log(`[falai] Generando imagen (${width}x${height}):`, prompt.slice(0, 50) + "...")
 
-  let imageSizeParam: any = { width, height };
+  let imageSizeParam: string | { width: number; height: number } = { width, height };
   if (width === 1280 && height === 720) imageSizeParam = "landscape_16_9";
   else if (width === 768 && height === 1344) imageSizeParam = "portrait_9_16";
   else if (width === 1024 && height === 1024) imageSizeParam = "square_hd";
@@ -49,7 +50,7 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
         throw new Error(`fal.ai API error (${res.status}): ${errText}`);
     }
 
-    const result = await res.json();
+    const result = (await res.json()) as any;
     const imageUrl = result.images?.[0]?.url || result.data?.images?.[0]?.url;
     
     if (!imageUrl) {
@@ -87,14 +88,14 @@ async function pollFalQueue(statusUrl: string, responseUrl: string): Promise<any
             throw new Error(`Error en polling (${res.status}): ${await res.text()}`);
         }
         
-        const data = await res.json();
+        const data = (await res.json()) as any;
         
         if (data.status === 'COMPLETED') {
             const finalRes = await fetch(responseUrl, {
                 headers: { "Authorization": `Key ${apiKey}` }
             });
             if (!finalRes.ok) throw new Error("Error obteniendo resultado final");
-            return await finalRes.json();
+            return (await finalRes.json()) as any;
         }
         
         if (data.status === 'IN_QUEUE' || data.status === 'IN_PROGRESS') {
@@ -146,7 +147,7 @@ export async function generateVideo(opts: GenerateVideoOptions): Promise<{ buffe
         }
     }
 
-    const submitData = await submitRes.json();
+    const submitData = (await submitRes.json()) as any;
     const statusUrl = submitData.status_url;
     const responseUrl = submitData.response_url;
     

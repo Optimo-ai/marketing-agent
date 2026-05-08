@@ -103,7 +103,7 @@ async function pollFalQueue(statusUrl: string, responseUrl: string): Promise<any
             continue;
         }
         
-        throw new Error(`Estado inesperado de fal.ai: ${data.status}`);
+        throw new Error(`Estado inesperado de fal.ai: ${data.status} - Info: ${JSON.stringify(data).slice(0, 200)}`);
     }
 }
 

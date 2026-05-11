@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Faltan los datos del copy.' }, { status: 400 })
       }
       const today = new Date().toISOString().slice(0, 10)
-      const prompt = `Today's date: ${today}. Month to schedule: ${month} ${year}.\nDo NOT assign any scheduledDate before ${today}. Posts for past dates must be scheduled starting from today onward.\n\n${JSON.stringify(copyData, null, 2)}`
+      const prompt = `Today's date: ${today}. Month to schedule: ${month} ${year}.\nCRITICAL: Do NOT assign any scheduledDate before ${today}. Posts intended for past dates MUST be rescheduled strictly starting from today onward.\n\n${JSON.stringify(copyData, null, 2)}`
       const raw = await runSkill('schedule', prompt, false)
       console.log('[schedule] Raw response from Claude (first 1000 chars):', raw.slice(0, 1000))
       let generatedSchedule: any

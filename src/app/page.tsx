@@ -1100,7 +1100,7 @@ export default function Home() {
       for (let i = 0; i < posts.length; i++) {
         const post = posts[i];
         setLoadingText(`Generando con IA (${i + 1}/${posts.length}): ${post.name ?? post.postName ?? ''}...`);
-        
+
         try {
           const res = await fetch('/api/generate-media', {
             method: 'POST',
@@ -1151,6 +1151,7 @@ export default function Home() {
     const postFromCal = calendar.find((p: any) => String(p.id ?? p.postId) === String(item.postId))
     if (!postFromCal) { showToast('Post no encontrado en calendario'); return }
     setAiMediaRegen(prev => new Set(prev).add(item.postId))
+
     try {
       const res = await fetch('/api/generate-media', {
         method: 'POST',
@@ -1959,6 +1960,27 @@ export default function Home() {
                         {briefingApproved ? 'Ver Fase 2 →' : 'Comenzar Fase 1 →'}
                       </button>
                     </div>
+
+                    {/* Tarjeta de Resumen del Briefing en el Dashboard */}
+                    {briefing && (
+                      <div className="card">
+                        <div className="card-header">
+                          <div><div className="card-title">Resumen del Briefing</div><div className="card-sub">{currentMonth} {currentYear}</div></div>
+                          <button className="btn btn-sm" onClick={() => navTo('fase1')}>Ver completo →</button>
+                        </div>
+                        <div style={{fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--surface2)', padding: 14, borderRadius: 'var(--r-sm)', maxHeight: 250, overflowY: 'auto', whiteSpace: 'pre-wrap'}}>
+                          {typeof briefing.loadedContent === 'string'
+                            ? String(briefing.loadedContent)
+                            : (
+                              <>
+                                {briefing.contextoReferencia && <div style={{marginBottom: 10}}><strong style={{color:'var(--teal)'}}>Contexto:</strong><br/>{String(briefing.contextoReferencia)}</div>}
+                                {briefing.tendenciasContenido && <div style={{marginBottom: 10}}><strong style={{color:'var(--teal)'}}>Tendencias:</strong><br/>{String(briefing.tendenciasContenido)}</div>}
+                                {briefing.insightsClave && Array.isArray(briefing.insightsClave) && <div><strong style={{color:'var(--teal)'}}>Insights Clave:</strong><br/>• {briefing.insightsClave.join('\n• ')}</div>}
+                              </>
+                            )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{display:'flex',flexDirection:'column',gap:16}}>

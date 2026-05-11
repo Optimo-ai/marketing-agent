@@ -11,6 +11,7 @@ export interface GenerateImageOptions {
   height: number
   numInferenceSteps?: number
   guidanceScale?: number
+  referenceImage?: string
 }
 
 // ─── IMÁGENES (Flux Schnell) ────────────────────────────────────────────────
@@ -28,21 +29,31 @@ export async function generateImage(opts: GenerateImageOptions): Promise<Buffer>
   else if (width === 768 && height === 1344) imageSizeParam = "portrait_16_9";
   else if (width === 1024 && height === 1024) imageSizeParam = "square_hd";
 
+  let endpoint = "https://fal.run/fal-ai/flux/schnell";
+  let bodyPayload: any = {
+      prompt: prompt,
+      image_size: imageSizeParam,
+      num_inference_steps: Math.min(opts.numInferenceSteps ?? 4, 4),
+      num_images: 1,
+      enable_safety_checker: false,
+      output_format: 'jpeg',
+  };
+
+  if (opts.referenceImage) {
+      // Usar image-to-image para clonar el estilo de la imagen del proyecto
+      endpoint = "https://fal.run/fal-ai/flux/dev/image-to-image";
+      bodyPayload.image_url = opts.referenceImage;
+      bodyPayload.strength = 0.85; // Fuerza de transformación: 0.85 crea algo nuevo manteniendo el "vibe" visual
+  }
+
   try {
-    const res = await fetch("https://fal.run/fal-ai/flux/schnell", {
+    const res = await fetch(endpoint, {
         method: "POST",
         headers: {
             "Authorization": `Key ${apiKey}`,
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-            prompt: prompt,
-            image_size: imageSizeParam,
-            num_inference_steps: Math.min(opts.numInferenceSteps ?? 4, 4),
-            num_images: 1,
-            enable_safety_checker: false,
-            output_format: 'jpeg',
-        })
+        body: JSON.stringify(bodyPayload)
     });
 
     if (!res.ok) {

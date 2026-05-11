@@ -6,6 +6,8 @@
 // Devuelve data URLs para preview (no sube a GHL hasta que el usuario apruebe).
 
 import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 
 export const maxDuration = 300;
 
@@ -36,6 +38,29 @@ function detectVideoStyle(contentDir: string, week: number): VideoStyle {
   if (CINEMATIC_KEYWORDS.some(k => text.includes(k))) return 'cinematic'
   if (LIFESTYLE_KEYWORDS.some(k => text.includes(k))) return 'lifestyle'
   return WEEK_STYLE_ROTATION[(week - 1) % 4] ?? 'cinematic'
+}
+
+// ─── IMÁGENES DE REFERENCIA FIJAS ─────────────────────────────────────────────
+function getFixedReferenceImage(project: string): string | undefined {
+  const brand = (project || '').toLowerCase()
+  let normalized = ''
+  if (brand.includes('kasa')) normalized = 'kasa'
+  else if (brand.includes('arko')) normalized = 'arko'
+  else if (brand.includes('aria')) normalized = 'aria'
+
+  if (!normalized) return undefined // Si no es un proyecto específico (ej. Noriega Group), no usamos referencia fija
+
+  // Elegir aleatoriamente entre la opción 1 y 2
+  const rand = Math.random() < 0.5 ? 1 : 2
+  const fileName = `${normalized}-${rand}.jpg`
+  const filePath = path.join(process.cwd(), 'public', 'references', fileName)
+
+  try {
+    if (fs.existsSync(filePath)) {
+      return `data:image/jpeg;base64,${fs.readFileSync(filePath).toString('base64')}`
+    }
+  } catch (err) {}
+  return undefined
 }
 
 // ─── HELPERS DE FORMATO ───────────────────────────────────────────────────────
@@ -72,10 +97,11 @@ function mapAspectRatio(w: number, h: number): {
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
+  referenceImage?: string
 ): Promise<{ buffer: Buffer; jobId?: string }> {
   try {
     const { width, height } = aspectRatio === '16:9' ? { width: 1280, height: 720 } : aspectRatio === '9:16' ? { width: 768, height: 1344 } : { width: 1024, height: 1024 }
-    const buffer = await generateImage({ prompt, width, height })
+    const buffer = await generateImage({ prompt, width, height, referenceImage })
     return { buffer, jobId: "fal-flux-" + Date.now() }
   } catch (err: any) {
     const msg = String(err?.message ?? err)
@@ -118,6 +144,7 @@ export async function POST(req: NextRequest) {
           const postId       = post.id ?? post.postId
           const postName     = post.name ?? post.postName ?? ''
           const contentDir   = post.contentDirection ?? postName
+          const refImage     = getFixedReferenceImage(post.project ?? '')
 
           // ── REEL / VIDEO ────────────────────────────────────────────────────
           if (isVideo) {
@@ -170,6 +197,7 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
                 const imgResult = await generateAnyImage(
                   config.aiPromptBase + ', ' + contentDir.slice(0, 50) + ', cinematic still frame, no people, luxury real estate',
                   videoAspect,
+                  refImage
                 )
                 videoBuffer     = imgResult.buffer
                 higgsfieldJobId = imgResult.jobId
@@ -281,7 +309,7 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
             // Step 3: Fal AI genera las imágenes de foto
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
             const photoResults = await Promise.all(
-              photoPrompts.map(p => generateAnyImage(p, aspectRatio))
+              photoPrompts.map(p => generateAnyImage(p, aspectRatio, refImage))
             )
             const photoBuffers = photoResults.map(r => r.buffer)
             const carouselJobIds = photoResults.map(r => r.jobId).filter(Boolean) as string[]
@@ -351,7 +379,7 @@ Media type needed: image`
 
             // Step 2: Higgsfield genera la imagen
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
-            const imgResult = await generateAnyImage(cleanPrompt, aspectRatio)
+            const imgResult = await generateAnyImage(cleanPrompt, aspectRatio, refImage)
 
             // Step 3: Brand overlay
             const rendered = await renderImage({

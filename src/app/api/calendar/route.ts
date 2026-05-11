@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
       // Incluir la fecha actual para que Claude no genere posts en fechas pasadas
       const today = new Date().toISOString().slice(0, 10)
       
-      const prompt = `Today's date: ${today}. Do NOT generate any posts with suggestedDay before today.
+      const prompt = `Today's date: ${today}.
+CRITICAL INSTRUCTION: Do NOT generate any posts with suggestedDay before today (${today}).
+CRITICAL INSTRUCTION: Do NOT generate any "Reel" or "Video" formats for now. ONLY generate image-based formats (e.g., "Carousel", "Foto", "Story", "Lead Magnet").
 
 Generate the content calendar for ${month} ${year}.
 Here is the approved Monthly Brief as context:

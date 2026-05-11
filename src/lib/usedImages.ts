@@ -30,7 +30,11 @@ function readStore(): UsedImagesStore {
 }
 
 function writeStore(store: UsedImagesStore): void {
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf-8')
+  try {
+    fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf-8')
+  } catch {
+    // Vercel y entornos serverless tienen filesystem read-only — falla silenciosamente
+  }
 }
 
 /** Marca una imagen como usada */

@@ -189,9 +189,9 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
               isRealVideo = false
             }
 
-            // Si video falló, generar thumbnail estático
+            // Si video falló, generar thumbnail estático con Higgsfield; si también falla, usar canvas
             if (!videoBuffer) {
-              console.warn(`[generate-media] Generando thumbnail estático para "${postName}"`)
+              console.warn(`[generate-media] Generando thumbnail para "${postName}"`)
               try {
                 const imgResult = await generateAnyImage(
                   config.aiPromptBase + ', ' + contentDir.slice(0, 50) + ', cinematic still frame, no people, luxury real estate',
@@ -202,9 +202,18 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
                 higgsfieldJobId = imgResult.jobId
                 isRealVideo     = false
               } catch (imgErr) {
-                console.error(`[generate-media] Image thumbnail falló para "${postName}":`, String(imgErr).slice(0, 150))
-                errors.push({ postId, postName, error: `Imagen estática fallida: ${String(imgErr).slice(0, 100)}` })
-                return
+                console.warn(`[generate-media] Higgsfield thumbnail falló para "${postName}" — usando canvas fallback`)
+                // Fallback: canvas con plantilla de marca (fondo negro + texto)
+                const canvasFallback = await renderImage({
+                  brand,
+                  format:      renderFormat,
+                  title:       postName,
+                  body:        contentDir.slice(0, 80),
+                  logoBuffer,
+                  outputFormat: 'jpg',
+                })
+                videoBuffer = canvasFallback.buffer
+                isRealVideo = false
               }
             }
 
@@ -376,17 +385,27 @@ Media type needed: image`
             const rawPrompt   = await runSkill('imagePrompt', claudeInput)
             const cleanPrompt = rawPrompt.trim().replace(/^["']|["']$/g, '')
 
-            // Step 2: Higgsfield genera la imagen
+            // Step 2: Higgsfield genera la imagen — con fallback canvas si el servidor no responde
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
-            const imgResult = await generateAnyImage(cleanPrompt, aspectRatio, refImage)
+            let imgBuffer: Buffer | undefined
+            let higgsfieldJobId: string | undefined
 
-            // Step 3: Brand overlay
+            try {
+              const imgResult = await generateAnyImage(cleanPrompt, aspectRatio, refImage)
+              imgBuffer       = imgResult.buffer
+              higgsfieldJobId = imgResult.jobId
+            } catch (higgsErr) {
+              console.warn(`[generate-media] Higgsfield no disponible para "${postName}" — usando plantilla canvas como fallback. Error: ${String(higgsErr).slice(0,120)}`)
+              // imgBuffer queda undefined → renderImage usará fondo negro de marca
+            }
+
+            // Step 3: Brand overlay (con o sin foto de Higgsfield)
             const rendered = await renderImage({
               brand,
               format:            renderFormat,
               title:             postName,
               body:              contentDir.slice(0, 100),
-              sourceImageBuffer: imgResult.buffer,
+              sourceImageBuffer: imgBuffer,
               logoBuffer,
               outputFormat:      'jpg',
             })
@@ -400,12 +419,13 @@ Media type needed: image`
               dataUrl:          `data:image/jpeg;base64,${rendered.buffer.toString('base64')}`,
               isGhlUrl:         false,
               prompt:           cleanPrompt,
+              isFallback:       !imgBuffer,
               platforms:        post.platforms ?? [],
               week:             post.week ?? 1,
               suggestedDay:     post.suggestedDay ?? '',
               contentDirection: contentDir,
               project:          post.project ?? '',
-              higgsfieldJobIds: imgResult.jobId ? [imgResult.jobId] : [],
+              higgsfieldJobIds: higgsfieldJobId ? [higgsfieldJobId] : [],
             })
           }
 

@@ -1199,8 +1199,12 @@ export default function Home() {
             postName: copy,
             format: 'Story',
             project: storyProject,
-            image: { thumbnail: storyImage?.preview },
-            contentDirection: ''
+            image: { thumbnail: storyImage?.preview, fileId: `story-local-${Date.now()}` },
+            contentDirection: '',
+            needsAI: false,
+            platforms: [],
+            week: 1,
+            suggestedDay: '',
           }]
         })
       })
@@ -1211,6 +1215,8 @@ export default function Home() {
       if (data.posts && data.posts.length > 0) {
         setStoryRendered(data.posts[0].imageUrl || data.posts[0].dataUrl)
         showToast('✓ Story lista para descargar')
+      } else if (data.errors?.length > 0) {
+        throw new Error(data.errors[0].error || 'Error en el render')
       }
     } catch (e) {
       showToast('Error: ' + String(e))
@@ -2367,7 +2373,7 @@ export default function Home() {
                       </div>
 
                       {/* Barra de filtros */}
-                      <div style={{display:'flex',gap:8,flexWrap:'wrap' as const,padding:'0 0 14px',borderBottom:'1px solid var(--border)',marginBottom:14}}>
+                      <div className="cal-filters" style={{padding:'0 0 14px',borderBottom:'1px solid var(--border)',marginBottom:14}}>
                         <select value={calFilterBrand} onChange={e => setCalFilterBrand(e.target.value)}
                           style={{padding:'5px 10px',background:'var(--surface2)',border:'1px solid var(--border)',borderRadius:4,color:'var(--text)',fontSize:12}}>
                           <option value="">Todas las marcas</option>
@@ -2415,12 +2421,12 @@ export default function Home() {
 
                       {calViewMode === 'grid' && (
                         <div>
-                          <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '16px'}}>
+                          <div className="cal-grid">
                             {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d => (
-                              <div key={d} style={{textAlign:'center', fontWeight:600, fontSize:12, padding:'8px 0', color:'var(--text2)'}}>{d}</div>
+                              <div key={d} style={{textAlign:'center', fontWeight:600, fontSize:11, padding:'6px 0', color:'var(--text2)'}}>{d}</div>
                             ))}
                             {gridDays.map((d, i) => {
-                              if (!d) return <div key={i} style={{background: 'transparent', minHeight: '100px'}} />
+                              if (!d) return <div key={i} style={{background: 'transparent', minHeight: '50px'}} />
                               const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
                               const dayPosts = calendar.filter(p => {
                                 if (calFilterBrand && !((p.project ?? '') as string).toLowerCase().includes(calFilterBrand.toLowerCase())) return false
@@ -2432,9 +2438,9 @@ export default function Home() {
                               const isSelected = selectedDayStr === dateStr
                               return (
                                 <div key={i} onClick={() => setSelectedDayStr(isSelected ? null : dateStr)}
-                                  style={{background: isSelected ? 'var(--surface)' : 'var(--surface2)', border: isSelected ? '2px solid var(--teal)' : '1px solid var(--border)', borderRadius: '8px', padding: '8px', minHeight: '100px', cursor: 'pointer', transition: 'all 0.2s'}}>
-                                  <div style={{fontWeight:600, fontSize:12, color: isSelected ? 'var(--teal)' : 'var(--text)', marginBottom: '8px'}}>{d.getDate()}</div>
-                                  <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                                  className={`cal-day-cell${isSelected ? ' selected' : ''}`}>
+                                  <div className={`cal-day-num${isSelected ? ' selected-day' : ''}`}>{d.getDate()}</div>
+                                  <div style={{display:'flex',flexDirection:'column',gap:2}}>
                                     {dayPosts.map((p, idx) => {
                                       const globalIdx = calendar.indexOf(p)
                                       const isApproved = approvedPosts.has(globalIdx)
@@ -2443,9 +2449,9 @@ export default function Home() {
                                       if (isApproved) { bgColor = 'rgba(45,212,191,0.15)'; color = 'var(--teal)' }
                                       else if (isRejected) { bgColor = 'rgba(239,68,68,0.15)'; color = 'var(--red)' }
                                       return (
-                                        <div key={idx} style={{fontSize: 10, padding: '4px 6px', borderRadius: '4px', background: bgColor, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: `1px solid ${isApproved ? 'var(--teal)' : isRejected ? 'var(--red)' : 'var(--border)'}`}}>
+                                        <span key={idx} className="cal-post-chip" style={{background: bgColor, color, borderColor: isApproved ? 'var(--teal)' : isRejected ? 'var(--red)' : 'var(--border)'}}>
                                           {p.name}
-                                        </div>
+                                        </span>
                                       )
                                     })}
                                   </div>

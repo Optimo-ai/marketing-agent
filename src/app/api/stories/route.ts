@@ -9,10 +9,10 @@ export const maxDuration = 60
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const BRAND_VOICE: Record<string, string> = {
-  'KASA':          'KASA Living — viviendas multifamiliares asequibles, comunidad, confort moderno, familia',
-  'Arko':          'Arko Golf & Residences — golf, resort lifestyle, exclusividad, naturaleza, segunda residencia premium',
-  'Aria':          'Aria Suites — suite premium, hotelero, servicios de lujo, experiencias únicas, inversión',
-  'Noriega Group': 'Noriega Group — desarrollo inmobiliario visionario, legado, calidad de vida, República Dominicana',
+  'KASA':          'KASA Living — affordable multifamily residences, community, modern comfort, family lifestyle',
+  'Arko':          'Arko Golf & Residences — golf, resort lifestyle, exclusivity, nature, premium second home',
+  'Aria':          'Aria Suites — premium suite, hospitality, luxury services, unique experiences, investment',
+  'Noriega Group': 'Noriega Group — visionary real estate development, legacy, quality of life, Dominican Republic',
 }
 
 export async function POST(req: NextRequest) {
@@ -41,20 +41,20 @@ export async function POST(req: NextRequest) {
           },
           {
             type: 'text',
-            text: `Eres el director creativo de ${brandName}, empresa inmobiliaria premium en República Dominicana.
+            text: `You are the creative director of ${brandName}, a premium real estate company in the Dominican Republic.
 
-Marca: ${brand}
+Brand: ${brand}
 
-Analiza esta imagen de propiedad inmobiliaria y crea 5 copys distintos para Instagram Story (formato vertical 9:16).
+Analyze this real estate image and create 5 distinct copy options for an Instagram Story (vertical 9:16 format).
 
-Reglas:
-- Máximo 12 palabras por copy
-- Tono aspiracional, cálido, en español latino
-- Cada copy con un enfoque distinto: emocional, descriptivo, llamada a acción, pregunta retórica, urgencia/exclusividad
-- Sin hashtags ni emojis
-- Solo el texto del copy, sin explicaciones adicionales
+Rules:
+- Maximum 12 words per copy
+- Aspirational, warm, premium tone — in English
+- Each copy with a distinct angle: emotional, descriptive, call-to-action, rhetorical question, urgency/exclusivity
+- No hashtags or emojis
+- Only the copy text, no explanations
 
-Responde ÚNICAMENTE con un JSON array de 5 strings, sin markdown:
+Respond ONLY with a JSON array of 5 strings, no markdown:
 ["copy 1", "copy 2", "copy 3", "copy 4", "copy 5"]`,
           },
         ],

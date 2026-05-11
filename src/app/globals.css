@@ -251,6 +251,70 @@ input:focus, textarea:focus, select:focus { border-color: var(--purple-text); }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 2px; }
 
+/* CALENDAR GRID */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+.cal-grid > div {
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.cal-filters select {
+  flex: 1 1 120px;
+  min-width: 100px;
+  max-width: 180px;
+  padding: 5px 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+.cal-day-cell {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  min-height: 80px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.cal-day-cell.selected {
+  background: var(--surface);
+  border: 2px solid var(--teal);
+}
+.cal-day-num {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.cal-day-num.selected-day { color: var(--teal); }
+.cal-post-chip {
+  font-size: 9px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  margin-bottom: 2px;
+}
+
 /* RESPONSIVE */
 @media (max-width: 900px) {
   .sidebar { transform: translateX(-100%); }
@@ -261,6 +325,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--purple-text); }
   .content { padding: 14px; }
   .grid-2 { grid-template-columns: 1fr; }
   .grid-4 { grid-template-columns: 1fr 1fr; }
+  .cal-grid { gap: 4px; }
+  .cal-day-cell { padding: 4px; min-height: 60px; }
+  .cal-day-num { font-size: 10px; }
+  .cal-filters select { max-width: 100%; }
+}
+@media (max-width: 640px) {
+  .cal-grid {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+    font-size: 10px;
+  }
+  .cal-day-cell { padding: 3px; min-height: 50px; border-radius: 4px; }
+  .cal-day-num { font-size: 9px; margin-bottom: 2px; }
+  .cal-post-chip { font-size: 8px; padding: 1px 3px; }
+  .card { padding: 14px; overflow-x: auto; }
 }
 @media (max-width: 520px) {
   .grid-4 { grid-template-columns: 1fr 1fr; }

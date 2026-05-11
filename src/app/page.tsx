@@ -175,21 +175,25 @@ const DEFAULT_MONTH = new Date().toLocaleString('es-ES', { month: 'long' }).repl
 const DEFAULT_YEAR = new Date().getFullYear()
 
 function formatText(text: string) {
-  if (!text) return { __html: '' }
-  const html = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/^### (.*$)/gim, '<h3 style="color:var(--teal); margin: 16px 0 8px 0; font-size:15px;">$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2 style="color:var(--teal); margin: 20px 0 10px 0; font-size:18px;">$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1 style="color:var(--teal); margin: 24px 0 12px 0; font-size:22px;">$1</h1>')
-    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text); font-weight: 700;">$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/^[-*] (.*$)/gim, '<li style="margin-left:20px; margin-bottom:6px;">$1</li>')
-    .replace(/\n/g, '<br/>')
-    .replace(/<\/li><br\/>/g, '</li>')
-    .replace(/<br\/><li/g, '<li')
-  return { __html: html }
+  try {
+    if (!text) return { __html: '' }
+    const html = String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/^### (.*$)/gim, '<h3 style="color:var(--teal); margin: 16px 0 8px 0; font-size:15px;">$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2 style="color:var(--teal); margin: 20px 0 10px 0; font-size:18px;">$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1 style="color:var(--teal); margin: 24px 0 12px 0; font-size:22px;">$1</h1>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text); font-weight: 700;">$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/^[-*] (.*$)/gim, '<li style="margin-left:20px; margin-bottom:6px;">$1</li>')
+      .replace(/\n/g, '<br/>')
+      .replace(/<\/li><br\/>/g, '</li>')
+      .replace(/<br\/><li/g, '<li')
+    return { __html: html }
+  } catch (error) {
+    return { __html: '<em>Error al renderizar el texto.</em>' }
+  }
 }
 
 function Toast({ message }: { message: string }) {

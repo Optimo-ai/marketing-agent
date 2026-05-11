@@ -45,29 +45,36 @@ function detectVideoStyle(contentDir: string, week: number): VideoStyle {
 }
 
 // ─── IMÁGENES DE REFERENCIA FIJAS ─────────────────────────────────────────────
-// Redimensiona a max 1024px y calidad 80 antes de base64 — Claude Vision rechaza >5MB
-async function getFixedReferenceImage(project: string): Promise<string | undefined> {
-  const brand = (project || '').toLowerCase()
-  let normalized = ''
-  if (brand.includes('kasa')) normalized = 'kasa'
-  else if (brand.includes('arko')) normalized = 'arko'
-  else if (brand.includes('aria')) normalized = 'aria'
 
-  if (!normalized) return undefined
+function normalizeRefBrand(project: string): string {
+  const b = (project || '').toLowerCase()
+  if (b.includes('kasa')) return 'kasa'
+  if (b.includes('arko')) return 'arko'
+  if (b.includes('aria')) return 'aria'
+  return ''
+}
 
-  const rand = Math.random() < 0.5 ? 1 : 2
-  const fileName = `${normalized}-${rand}.jpg`
-  const filePath = path.join(process.cwd(), 'public', 'references', fileName)
+// URL pública — para Higgsfield image_url (necesita HTTP URL real, no base64)
+function getRefPublicUrl(project: string, appBaseUrl: string, rand: 1|2): string | undefined {
+  const n = normalizeRefBrand(project)
+  if (!n) return undefined
+  return `${appBaseUrl}/references/${n}-${rand}.jpg`
+}
 
+// Base64 comprimido — para Claude Vision (max 5MB)
+async function getRefImageBase64(project: string, rand: 1|2): Promise<string | undefined> {
+  const n = normalizeRefBrand(project)
+  if (!n) return undefined
+  const filePath = path.join(process.cwd(), 'public', 'references', `${n}-${rand}.jpg`)
   try {
     if (!fs.existsSync(filePath)) return undefined
-    const compressed = await sharp(fs.readFileSync(filePath))
+    const buf = await sharp(fs.readFileSync(filePath))
       .resize(1024, 1024, { fit: 'inside' })
       .jpeg({ quality: 80 })
       .toBuffer()
-    return `data:image/jpeg;base64,${compressed.toString('base64')}`
+    return `data:image/jpeg;base64,${buf.toString('base64')}`
   } catch (err) {
-    console.warn('[generate-media] getFixedReferenceImage error:', String(err).slice(0, 80))
+    console.warn('[generate-media] getRefImageBase64 error:', String(err).slice(0, 80))
     return undefined
   }
 }
@@ -103,29 +110,34 @@ function mapAspectRatio(w: number, h: number): {
 }
 
 // Genera imagen con cascada de fallbacks — NUNCA lanza error
-// 1. Higgsfield AI (si está disponible)
-// 2. Imagen de referencia de marca en /public/references/
-// 3. Picsum Photos (fotos pro de arquitectura, gratis, sin API key)
+// 1. Higgsfield AI con image-to-image (URL pública) si disponible
+// 2. Imagen de referencia base64 como fondo directo (fallback Higgsfield)
+// 3. Picsum Photos
 // 4. undefined → renderImage usa fondo negro de marca
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
-  referenceImage?: string   // data URL de /public/references/ — también usada como fallback
+  refImageB64?: string,   // base64 data URL — usado como fondo si Higgsfield falla
+  refImageUrl?: string    // URL pública HTTP — pasada a Higgsfield para image-to-image real
 ): Promise<{ buffer: Buffer | undefined; jobId?: string }> {
-  // ── 1. Higgsfield ────────────────────────────────────────────────────────────
+  // ── 1. Higgsfield (con image-to-image si hay URL pública) ────────────────────
   try {
-    const { buffer, jobId } = await generateImageTracked({ prompt, aspectRatio, referenceImage })
+    const { buffer, jobId } = await generateImageTracked({
+      prompt,
+      aspectRatio,
+      referenceImage: refImageUrl,   // HTTP URL para Higgsfield; undefined si no hay
+    })
     return { buffer, jobId }
   } catch (err: any) {
     console.warn(`[generate-media] Higgsfield no disponible (${String(err?.message ?? err).slice(0, 80)}) — buscando foto alternativa`)
   }
 
-  // ── 2. Imagen de referencia de la marca ──────────────────────────────────────
-  if (referenceImage) {
+  // ── 2. Imagen de referencia base64 como fondo ────────────────────────────────
+  if (refImageB64) {
     try {
-      const [, b64] = referenceImage.split(',')
+      const [, b64] = refImageB64.split(',')
       const buf = Buffer.from(b64, 'base64')
-      if (buf.length > 5000) {   // mínimo razonable para una imagen real
+      if (buf.length > 5000) {
         console.log('[generate-media] Usando imagen de referencia de marca como foto de fondo')
         return { buffer: buf }
       }
@@ -166,9 +178,10 @@ async function generatePromptsFromReference(
   const [header, b64] = refImageDataUrl.split(',')
   const mimeType = (header.match(/:(.*?);/)?.[1] ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
+  const baseInstruction = `You are a creative director for ${brandName} luxury real estate. This is an actual photo of our property. Describe what you see in this image with extreme precision: the exact building architecture, facade materials, colors, structural elements, lighting conditions, surroundings. Then write`
   const promptText = count === 1
-    ? `You are a creative director for ${brandName}, a luxury real estate brand. Analyze this reference photo and write ONE cinematic AI image generation prompt for a variation. Keep: luxury feel, architectural style, lighting quality, color palette. Vary: camera angle, composition, or time of day. Context: ${contentDir}. Respond ONLY with the prompt string (max 80 words).`
-    : `You are a creative director for ${brandName}, a luxury real estate brand. Analyze this reference photo and write ${count} distinct AI image generation prompts for variations of this scene. Keep: luxury feel, architectural style, lighting quality, color palette. Vary across prompts: camera angle, composition, time of day. Context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
+    ? `${baseInstruction} ONE AI image generation prompt that will reproduce this exact same building and scene as faithfully as possible. Only minor variation allowed: slightly different camera angle or time of day. Content context: ${contentDir}. Respond ONLY with the prompt string (max 100 words).`
+    : `${baseInstruction} ${count} AI image generation prompts that all show this same building and architectural style, each from a slightly different angle or lighting condition. Content context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
@@ -217,6 +230,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No hay posts' }, { status: 400 })
     }
 
+    // URL pública del servidor — usada para que Higgsfield pueda fetchear las imágenes de referencia
+    const appBaseUrl = `${req.nextUrl.protocol}//${req.nextUrl.host}`
+
     const logoBuffer = logoBase64 ? Buffer.from(logoBase64, 'base64') : undefined
     const items: any[]  = []
     const errors: any[] = []
@@ -237,7 +253,9 @@ export async function POST(req: NextRequest) {
           const postId       = post.id ?? post.postId
           const postName     = post.name ?? post.postName ?? ''
           const contentDir   = post.contentDirection ?? postName
-          const refImage     = await getFixedReferenceImage(post.project ?? '')
+          const refRand      = (Math.random() < 0.5 ? 1 : 2) as 1|2
+          const refImageB64  = await getRefImageBase64(post.project ?? '', refRand)
+          const refImageUrl  = getRefPublicUrl(post.project ?? '', appBaseUrl, refRand)
 
           // ── REEL / VIDEO ────────────────────────────────────────────────────
           if (isVideo) {
@@ -288,7 +306,8 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
               const imgResult = await generateAnyImage(
                 config.aiPromptBase + ', ' + contentDir.slice(0, 50) + ', cinematic still frame, no people, luxury real estate',
                 videoAspect,
-                refImage
+                refImageB64,
+                refImageUrl
               )
               // imgResult.buffer es undefined si Higgsfield falló → canvas fallback
               if (imgResult.buffer) {
@@ -373,9 +392,9 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
           } else if (isCarousel) {
             // Step 1: Generar prompts — Claude Vision si hay referencia, texto si no
             let photoPrompts: string[] = []
-            if (refImage) {
+            if (refImageB64) {
               try {
-                photoPrompts = await generatePromptsFromReference(refImage, config.displayName, contentDir, CAROUSEL_PHOTO_SLIDES)
+                photoPrompts = await generatePromptsFromReference(refImageB64, config.displayName, contentDir, CAROUSEL_PHOTO_SLIDES)
                 console.log(`[generate-media] Vision prompts para carousel "${postName}":`, photoPrompts)
               } catch (visionErr) {
                 console.warn('[generate-media] Claude Vision falló, usando texto:', String(visionErr).slice(0, 80))
@@ -420,7 +439,7 @@ IMPORTANT: Show building architecture, interiors, or amenities. NO ocean, NO bea
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
             // generateAnyImage nunca lanza — buffer=undefined significa canvas fallback por slide
             const photoResults = await Promise.all(
-              photoPrompts.map(p => generateAnyImage(p, aspectRatio, refImage))
+              photoPrompts.map(p => generateAnyImage(p, aspectRatio, refImageB64, refImageUrl))
             )
             const photoBuffers = photoResults.map(r => r.buffer)   // Buffer | undefined por slide
             const carouselJobIds = photoResults.flatMap(r => r.jobId ? [r.jobId] : [])
@@ -480,9 +499,9 @@ IMPORTANT: Show building architecture, interiors, or amenities. NO ocean, NO bea
           } else {
             // Step 1: Generar prompt — Claude Vision si hay referencia, texto si no
             let cleanPrompt = ''
-            if (refImage) {
+            if (refImageB64) {
               try {
-                const visionPrompts = await generatePromptsFromReference(refImage, config.displayName, contentDir, 1)
+                const visionPrompts = await generatePromptsFromReference(refImageB64, config.displayName, contentDir, 1)
                 cleanPrompt = visionPrompts[0] ?? ''
                 console.log(`[generate-media] Vision prompt para "${postName}": ${cleanPrompt.slice(0, 80)}`)
               } catch (visionErr) {
@@ -504,7 +523,7 @@ IMPORTANT: Show building architecture, interiors, or amenities. NO ocean, NO bea
             // Step 2: Higgsfield genera la imagen — con fallback canvas si el servidor no responde
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
             // generateAnyImage nunca lanza — si Higgsfield falla devuelve buffer=undefined
-            const imgResult     = await generateAnyImage(cleanPrompt, aspectRatio, refImage)
+            const imgResult     = await generateAnyImage(cleanPrompt, aspectRatio, refImageB64, refImageUrl)
             const imgBuffer     = imgResult.buffer   // undefined = canvas fallback
             const higgsfieldJobId = imgResult.jobId
 

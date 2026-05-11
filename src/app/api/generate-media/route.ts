@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import Anthropic from '@anthropic-ai/sdk'
 
 export const maxDuration = 300;
 
@@ -19,6 +20,8 @@ import {
 } from '@/lib/higgsfield'
 import { renderImage, renderCarouselSlide } from '@/lib/imageRenderer'
 import { processVideo } from '@/lib/videoProcessor'
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // ─── DETECTOR DE ESTILO DE VIDEO ─────────────────────────────────────────────
 // Analiza la dirección de contenido para elegir el tipo de video apropiado.
@@ -93,19 +96,104 @@ function mapAspectRatio(w: number, h: number): {
   return                   { aspectRatio: '1:1',  width: 1024, height: 1024 }
 }
 
-// Genera imagen — intenta Higgsfield, NUNCA lanza error: devuelve buffer=undefined si falla
+// Genera imagen con cascada de fallbacks — NUNCA lanza error
+// 1. Higgsfield AI (si está disponible)
+// 2. Imagen de referencia de marca en /public/references/
+// 3. Picsum Photos (fotos pro de arquitectura, gratis, sin API key)
+// 4. undefined → renderImage usa fondo negro de marca
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
-  referenceImage?: string
+  referenceImage?: string   // data URL de /public/references/ — también usada como fallback
 ): Promise<{ buffer: Buffer | undefined; jobId?: string }> {
+  // ── 1. Higgsfield ────────────────────────────────────────────────────────────
   try {
     const { buffer, jobId } = await generateImageTracked({ prompt, aspectRatio, referenceImage })
     return { buffer, jobId }
   } catch (err: any) {
-    console.warn(`[generate-media] Higgsfield no disponible → canvas fallback. ${String(err?.message ?? err).slice(0, 100)}`)
-    return { buffer: undefined, jobId: undefined }
+    console.warn(`[generate-media] Higgsfield no disponible (${String(err?.message ?? err).slice(0, 80)}) — buscando foto alternativa`)
   }
+
+  // ── 2. Imagen de referencia de la marca ──────────────────────────────────────
+  if (referenceImage) {
+    try {
+      const [, b64] = referenceImage.split(',')
+      const buf = Buffer.from(b64, 'base64')
+      if (buf.length > 5000) {   // mínimo razonable para una imagen real
+        console.log('[generate-media] Usando imagen de referencia de marca como foto de fondo')
+        return { buffer: buf }
+      }
+    } catch {}
+  }
+
+  // ── 3. Picsum Photos — fotos pro de arquitectura, gratis, sin API key ────────
+  try {
+    const seed    = prompt.replace(/[^a-zA-Z0-9]/g, '-').slice(0, 24)
+    const dims    = aspectRatio === '16:9' ? '1280/720'
+                  : aspectRatio === '9:16' ? '768/1344'
+                  : '1080/1080'
+    const picsumUrl = `https://picsum.photos/seed/${seed}/${dims}`
+    const ctrl    = new AbortController()
+    const timer   = setTimeout(() => ctrl.abort(), 8_000)
+    const res     = await fetch(picsumUrl, { signal: ctrl.signal })
+    clearTimeout(timer)
+    if (res.ok) {
+      console.log(`[generate-media] Picsum fallback OK para "${prompt.slice(0, 40)}"`)
+      return { buffer: Buffer.from(await res.arrayBuffer()) }
+    }
+  } catch {
+    console.warn('[generate-media] Picsum también falló — usando fondo negro de marca')
+  }
+
+  return { buffer: undefined }
+}
+
+// ─── CLAUDE VISION → VARIATION PROMPTS ───────────────────────────────────────
+// Analiza una imagen de referencia con Claude Vision y genera prompts de variación
+// específicos a esa imagen para pasar a Higgsfield (image-to-image).
+async function generatePromptsFromReference(
+  refImageDataUrl: string,
+  brandName: string,
+  contentDir: string,
+  count: number = 1
+): Promise<string[]> {
+  const [header, b64] = refImageDataUrl.split(',')
+  const mimeType = (header.match(/:(.*?);/)?.[1] ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+
+  const promptText = count === 1
+    ? `You are a creative director for ${brandName}, a luxury real estate brand. Analyze this reference photo and write ONE cinematic AI image generation prompt for a variation. Keep: luxury feel, architectural style, lighting quality, color palette. Vary: camera angle, composition, or time of day. Context: ${contentDir}. Respond ONLY with the prompt string (max 80 words).`
+    : `You are a creative director for ${brandName}, a luxury real estate brand. Analyze this reference photo and write ${count} distinct AI image generation prompts for variations of this scene. Keep: luxury feel, architectural style, lighting quality, color palette. Vary across prompts: camera angle, composition, time of day. Context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: count === 1 ? 300 : 600,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } },
+        { type: 'text', text: promptText }
+      ]
+    }]
+  })
+
+  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
+  const text = textBlock?.text ?? ''
+
+  if (count === 1) {
+    return [text.trim().replace(/^["']|["']$/g, '')]
+  }
+
+  try {
+    const match = text.match(/\[[\s\S]*\]/)
+    if (match) {
+      const parsed = JSON.parse(match[0])
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as string[]
+    }
+  } catch {}
+
+  // Fallback: líneas de texto si el JSON falla
+  const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 10)
+  return lines.length > 0 ? lines : [text.trim()]
 }
 
 // Patrón de carrusel según canvas-design-pro SKILL:
@@ -277,21 +365,31 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
 
           // ── CAROUSEL ────────────────────────────────────────────────────────
           } else if (isCarousel) {
-            // Step 1: Claude genera los prompts para las imágenes
-            const claudeInput = `Brand: ${config.displayName}
+            // Step 1: Generar prompts — Claude Vision si hay referencia, texto si no
+            let photoPrompts: string[] = []
+            if (refImage) {
+              try {
+                photoPrompts = await generatePromptsFromReference(refImage, config.displayName, contentDir, CAROUSEL_PHOTO_SLIDES)
+                console.log(`[generate-media] Vision prompts para carousel "${postName}":`, photoPrompts)
+              } catch (visionErr) {
+                console.warn('[generate-media] Claude Vision falló, usando texto:', String(visionErr).slice(0, 80))
+              }
+            }
+            if (photoPrompts.length === 0) {
+              const claudeInput = `Brand: ${config.displayName}
 Brand visual DNA: ${config.aiPromptBase}
 Project: ${post.project ?? ''}
 Format: portrait 1080x1350px
 Content direction: ${contentDir}
 Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
-            const rawSlidePrompts = await runSkill('carouselPrompts', claudeInput)
-            let photoPrompts: string[] = []
-            try {
-              photoPrompts = parseJSON<string[]>(rawSlidePrompts)
-              if (!Array.isArray(photoPrompts) || photoPrompts.length === 0) throw new Error('not array')
-            } catch {
-              const single = await runSkill('imagePrompt', `Brand: ${config.displayName}\nBrand visual DNA: ${config.aiPromptBase}\nContent direction: ${contentDir}`)
-              photoPrompts = [single.trim().replace(/^["']|["']$/g, '')]
+              const rawSlidePrompts = await runSkill('carouselPrompts', claudeInput)
+              try {
+                photoPrompts = parseJSON<string[]>(rawSlidePrompts)
+                if (!Array.isArray(photoPrompts) || photoPrompts.length === 0) throw new Error('not array')
+              } catch {
+                const single = await runSkill('imagePrompt', `Brand: ${config.displayName}\nBrand visual DNA: ${config.aiPromptBase}\nContent direction: ${contentDir}`)
+                photoPrompts = [single.trim().replace(/^["']|["']$/g, '')]
+              }
             }
             while (photoPrompts.length < CAROUSEL_PHOTO_SLIDES) photoPrompts.push(photoPrompts[0])
             photoPrompts = photoPrompts.slice(0, CAROUSEL_PHOTO_SLIDES)
@@ -372,16 +470,27 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
 
           // ── FOTO / STORY / LEAD MAGNET ───────────────────────────────────────
           } else {
-            // Step 1: Claude genera el prompt
-            const claudeInput = `Brand: ${config.displayName}
+            // Step 1: Generar prompt — Claude Vision si hay referencia, texto si no
+            let cleanPrompt = ''
+            if (refImage) {
+              try {
+                const visionPrompts = await generatePromptsFromReference(refImage, config.displayName, contentDir, 1)
+                cleanPrompt = visionPrompts[0] ?? ''
+                console.log(`[generate-media] Vision prompt para "${postName}": ${cleanPrompt.slice(0, 80)}`)
+              } catch (visionErr) {
+                console.warn('[generate-media] Claude Vision falló, usando texto:', String(visionErr).slice(0, 80))
+              }
+            }
+            if (!cleanPrompt) {
+              const claudeInput = `Brand: ${config.displayName}
 Brand visual DNA: ${config.aiPromptBase}
 Project: ${post.project ?? ''}
 Format: ${postFormat || 'post'} (${fmt.w}x${fmt.h}px)
 Content direction: ${contentDir}
 Media type needed: image`
-
-            const rawPrompt   = await runSkill('imagePrompt', claudeInput)
-            const cleanPrompt = rawPrompt.trim().replace(/^["']|["']$/g, '')
+              const rawPrompt = await runSkill('imagePrompt', claudeInput)
+              cleanPrompt = rawPrompt.trim().replace(/^["']|["']$/g, '')
+            }
 
             // Step 2: Higgsfield genera la imagen — con fallback canvas si el servidor no responde
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)

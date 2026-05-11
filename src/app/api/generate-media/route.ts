@@ -178,10 +178,10 @@ async function generatePromptsFromReference(
   const [header, b64] = refImageDataUrl.split(',')
   const mimeType = (header.match(/:(.*?);/)?.[1] ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
-  const baseInstruction = `You are a creative director for ${brandName} luxury real estate. This is an actual photo of our property. Describe what you see in this image with extreme precision: the exact building architecture, facade materials, colors, structural elements, lighting conditions, surroundings. Then write`
+  const styleDesc = `You are a creative director for ${brandName} luxury real estate. Study this reference photo of our actual property and extract its visual DNA: architectural style, facade materials, color palette, lighting mood, landscaping, atmosphere. Use that visual DNA to write`
   const promptText = count === 1
-    ? `${baseInstruction} ONE AI image generation prompt that will reproduce this exact same building and scene as faithfully as possible. Only minor variation allowed: slightly different camera angle or time of day. Content context: ${contentDir}. Respond ONLY with the prompt string (max 100 words).`
-    : `${baseInstruction} ${count} AI image generation prompts that all show this same building and architectural style, each from a slightly different angle or lighting condition. Content context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
+    ? `${styleDesc} ONE cinematic AI image generation prompt for a FRESH CREATIVE SHOT of this same property — a different angle, composition, or time of day that feels like it belongs in the same luxury photoshoot but is visually distinct from this reference. Content context: ${contentDir}. Be specific about architecture details you see. Respond ONLY with the prompt string (max 100 words).`
+    : `${styleDesc} ${count} cinematic AI image generation prompts, each a DISTINCT CREATIVE SHOT of this same property — different angles, compositions, and lighting moments that all feel like they belong in the same luxury photoshoot. Content context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',

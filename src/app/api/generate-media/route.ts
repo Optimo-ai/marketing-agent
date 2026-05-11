@@ -125,7 +125,7 @@ async function generateAnyImage(
     const { buffer, jobId } = await generateImageTracked({
       prompt,
       aspectRatio,
-      referenceImage: refImageUrl,   // HTTP URL para Higgsfield; undefined si no hay
+      referenceImageUrl: refImageUrl,   // HTTP URL → medias image-to-image
     })
     return { buffer, jobId }
   } catch (err: any) {

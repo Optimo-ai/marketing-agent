@@ -77,8 +77,8 @@ export interface HiggsfieldImageOptions {
   prompt:       string
   aspectRatio?: '1:1' | '4:3' | '3:4' | '16:9' | '9:16'  // default 1:1
   resolution?:  '1k' | '2k' | '4k'                         // default 1k
-  model?:       string                                       // default nano_banana_2
-  referenceImage?: string                                    // Data URL en Base64
+  model?:       string                                       // default nano_banana_flash
+  referenceImageUrl?: string                                 // URL pública HTTP → medias image-to-image
 }
 
 // ─── GENERACIÓN DE VIDEO ──────────────────────────────────────────────────────
@@ -128,11 +128,11 @@ export async function generateImage(opts: HiggsfieldImageOptions): Promise<Buffe
     aspect_ratio: opts.aspectRatio ?? '1:1',
     resolution: opts.resolution ?? '1k'
   }
-  if (opts.referenceImage) {
-    payload.image_url = opts.referenceImage
+  if (opts.referenceImageUrl) {
+    payload.medias = [{ value: opts.referenceImageUrl, role: 'image' }]
   }
 
-  console.log(`[higgsfield] Submitting image — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}`)
+  console.log(`[higgsfield] Submitting image — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}${opts.referenceImageUrl ? ' (image-to-image)' : ''}`)
   const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -239,11 +239,11 @@ export async function generateImageTracked(opts: HiggsfieldImageOptions): Promis
     aspect_ratio: opts.aspectRatio ?? '1:1',
     resolution: opts.resolution ?? '1k'
   }
-  if (opts.referenceImage) {
-    payload.image_url = opts.referenceImage
+  if (opts.referenceImageUrl) {
+    payload.medias = [{ value: opts.referenceImageUrl, role: 'image' }]
   }
 
-  console.log(`[higgsfield] Submitting image (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}`)
+  console.log(`[higgsfield] Submitting image (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}${opts.referenceImageUrl ? ' (image-to-image)' : ''}`)
   const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },

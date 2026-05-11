@@ -4,7 +4,7 @@
 // Por cada imagen: etiqueta semántica (interior/exterior/amenidad/lifestyle/aéreo/render)
 // Por cada post Carousel: agrupa 3-5 imágenes semánticamente similares
 // Por cada post Foto/Story: asigna la imagen más relevante según contentDirection
-// Posts sin imagen disponible: los marca como "needs_ai" para fal.ai
+// Posts sin imagen disponible: los marca como "needs_ai" para higgsfield
 
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'

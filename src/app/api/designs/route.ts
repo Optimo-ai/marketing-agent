@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { detectBrand, buildImagePrompt, BRAND_CONFIGS } from '@/lib/brandConfig'
-import { generateImage } from '@/lib/falai'
+import { generateImageTracked } from '@/lib/higgsfield'
 
 export async function POST(req: NextRequest) {
   try {
@@ -35,8 +35,7 @@ export async function POST(req: NextRequest) {
           // Generar imagen real con Higgsfield — con tracking de jobId
           const ratio = fmt.w / fmt.h
           const aspectRatio = ratio > 1.4 ? '16:9' as const : ratio < 0.8 ? '9:16' as const : '1:1' as const
-          const imgBuffer = await generateImage({ prompt, width: fmt.w, height: fmt.h })
-          const jobId = "fal-flux-" + Date.now()
+          const { buffer: imgBuffer, jobId } = await generateImageTracked({ prompt, aspectRatio })
 
           // Subir a GHL para obtener URL permanente
           const locationId = process.env.GHL_LOCATION_ID!

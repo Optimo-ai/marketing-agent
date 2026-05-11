@@ -1,6 +1,6 @@
 // src/app/api/generate-media/route.ts
 // Pipeline de generación de media:
-//   Images: Higgsfield flux_2 → fal.ai flux/schnell (fallback si Higgsfield 5xx/timeout)
+//   Images: Higgsfield
 //   Videos: Higgsfield exclusively (cinematic/lifestyle/avatar/creative)
 //
 // Devuelve data URLs para preview (no sube a GHL hasta que el usuario apruebe).
@@ -14,9 +14,9 @@ export const maxDuration = 300;
 import { runSkill, parseJSON } from '@/lib/claude'
 import { detectBrand, BRAND_CONFIGS } from '@/lib/brandConfig'
 import {
-  generateImage,
+  generateImageTracked,
   generateVideoTracked
-} from '@/lib/falai'
+} from '@/lib/higgsfield'
 import { renderImage, renderCarouselSlide } from '@/lib/imageRenderer'
 import { processVideo } from '@/lib/videoProcessor'
 
@@ -93,16 +93,15 @@ function mapAspectRatio(w: number, h: number): {
   return                   { aspectRatio: '1:1',  width: 1024, height: 1024 }
 }
 
-// Genera imagen — usando fal.ai
+// Genera imagen — usando higgsfield
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
   referenceImage?: string
 ): Promise<{ buffer: Buffer; jobId?: string }> {
   try {
-    const { width, height } = aspectRatio === '16:9' ? { width: 1280, height: 720 } : aspectRatio === '9:16' ? { width: 768, height: 1344 } : { width: 1024, height: 1024 }
-    const buffer = await generateImage({ prompt, width, height, referenceImage })
-    return { buffer, jobId: "fal-flux-" + Date.now() }
+    const { buffer, jobId } = await generateImageTracked({ prompt, aspectRatio })
+    return { buffer, jobId }
   } catch (err: any) {
     const msg = String(err?.message ?? err)
     throw err
@@ -177,7 +176,7 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
               const result = await generateVideoTracked({
                 prompt:      cleanPrompt,
                 aspectRatio: videoAspect,
-                duration:    '5',
+                duration:    5,
               })
               videoBuffer     = result.buffer
               higgsfieldJobId = result.jobId

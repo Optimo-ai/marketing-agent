@@ -22,6 +22,8 @@ MONDAY_API_KEY=eyJhbGci...
 MONDAY_WORKSPACE_ID=        # Número — lo ves en la URL de Monday al abrir tu workspace
 GHL_API_KEY=pit-...
 GHL_LOCATION_ID=61SJ07b3I1IFjvlP5TE3
+HIGGSFIELD_API_KEY=tu_clave_api_de_higgsfield
+HIGGSFIELD_AVATAR_ID=tu_id_de_avatar_opcional
 NEXTAUTH_SECRET=cualquier_string_aleatorio_largo
 NEXTAUTH_URL=http://localhost:3000
 ```

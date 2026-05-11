@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { detectBrand, buildImagePrompt } from '@/lib/brandConfig'
 import { renderImage } from '@/lib/imageRenderer'
-import { generateVideo as generateFalVideo } from '@/lib/falai'
+import { generateVideo as generateHiggsfieldVideo } from '@/lib/higgsfield'
 
 async function uploadToGHL(buf: Buffer, filename: string, mime: string): Promise<string> {
   const locationId = process.env.GHL_LOCATION_ID!
@@ -67,13 +67,12 @@ export async function POST(req: NextRequest) {
     const videoPrompt = buildImagePrompt(brand, contentDirection ?? postName ?? '', 'post')
     const animationPrompt = `${videoPrompt}, subtle cinematic movement, slow pan, luxury real estate reveal animation, professional video quality`
 
-    console.log(`[mcp-edit] Generando video animado con Fal AI...`)
-    const result = await generateFalVideo({
+    console.log(`[mcp-edit] Generando video animado con Higgsfield...`)
+    const videoBuf = await generateHiggsfieldVideo({
       prompt:      animationPrompt,
       aspectRatio: '16:9',
-      duration:    '5',
+      duration:    5,
     })
-    const videoBuf = result.buffer
 
     // Paso 4: Subir el video editado a GHL
     const videoFilename = `mcp_edit_${brand}_${Date.now()}.mp4`

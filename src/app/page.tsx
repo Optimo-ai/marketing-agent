@@ -9,6 +9,8 @@ type ContentType = 'carrusel' | 'post' | 'reel'
 type ContentStatus = 'borrador' | 'revision' | 'aprobado' | 'programado' | 'publicado'
 
 interface BriefingData {
+  content?: string
+  loadedContent?: string
   contextoReferencia?: string
   desempenoAnuncios?: string
   actividadCompetencia?: string
@@ -2065,70 +2067,11 @@ export default function Home() {
                         </div>
                       </div>
 
-                      {/* Caso: briefing cargado desde Monday como texto plano */}
-                      {typeof briefing.loadedContent === 'string' && briefing.loadedContent.length > 0 && (
-                        <div style={{fontSize:13,lineHeight:1.8,color:'var(--text)',whiteSpace:'pre-wrap',background:'var(--surface2)',padding:'14px 16px',borderRadius:'var(--r-sm)'}}>
-                          {String(briefing.loadedContent)}
+                      {/* Mostrar briefing como texto legible humanamente */}
+                      {briefing && (briefing.content || briefing.loadedContent) && (
+                        <div style={{fontSize:13,lineHeight:1.8,color:'var(--text)',whiteSpace:'pre-wrap',background:'var(--surface2)',padding:'14px 16px',borderRadius:'var(--r-sm)',maxHeight:'600px',overflowY:'auto'}}>
+                          {String(briefing.content || briefing.loadedContent)}
                         </div>
-                      )}
-
-                      {/* Caso: briefing estructurado (recién generado) */}
-                      {!briefing.loadedContent && (
-                        <>
-                          {briefing.contextoReferencia && (
-                            <div style={{marginBottom:16}}>
-                              <div className="section-label">🧭 Contexto de referencia</div>
-                              <div style={{fontSize:13,lineHeight:1.7,color:'var(--text)'}}>{briefing.contextoReferencia as string}</div>
-                            </div>
-                          )}
-
-                          {briefing.desempenoAnuncios && (
-                            <div style={{marginBottom:16}}>
-                              <div className="section-label">📊 Desempeño de anuncios</div>
-                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.desempenoAnuncios as string}</div>
-                            </div>
-                          )}
-
-                          {briefing.actividadCompetencia && (
-                            <div style={{marginBottom:16}}>
-                              <div className="section-label">🏢 Actividad de la competencia</div>
-                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.actividadCompetencia as string}</div>
-                            </div>
-                          )}
-
-                          {briefing.tendenciasContenido && (
-                            <div style={{marginBottom:16}}>
-                              <div className="section-label">📈 Tendencias y contenido viral</div>
-                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.tendenciasContenido as string}</div>
-                            </div>
-                          )}
-
-                          {briefing.noticiasSector && (
-                            <div style={{marginBottom:16}}>
-                              <div className="section-label">📰 Noticias del sector</div>
-                              <div style={{fontSize:13,lineHeight:1.7}}>{briefing.noticiasSector as string}</div>
-                            </div>
-                          )}
-
-                          {briefing.insightsClave && Array.isArray(briefing.insightsClave) && (
-                            <div>
-                              <div className="section-label">✅ Insights clave</div>
-                              {(briefing.insightsClave as string[]).map((insight: string, i: number) => (
-                                <div key={i} style={{display:'flex',gap:10,padding:'8px 12px',background:'var(--surface2)',borderRadius:'var(--r-sm)',marginBottom:7,fontSize:13,lineHeight:1.55}}>
-                                  <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)',width:18,flexShrink:0,paddingTop:1}}>{String(i+1).padStart(2,'0')}</span>
-                                  <span>{insight}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Fallback si el JSON tiene otras llaves */}
-                          {!briefing.contextoReferencia && !briefing.tendenciasContenido && !briefing.insightsClave && (
-                            <div style={{fontSize:13,lineHeight:1.8,color:'var(--text)',whiteSpace:'pre-wrap',background:'var(--surface2)',padding:'14px 16px',borderRadius:'var(--r-sm)', overflowX: 'auto'}}>
-                              {typeof briefing === 'object' ? JSON.stringify(briefing, null, 2) : String(briefing)}
-                            </div>
-                          )}
-                        </>
                       )}
                     </div>
 

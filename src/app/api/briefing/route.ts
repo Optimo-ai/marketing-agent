@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
       let docId = ''
       try {
         const title = `Briefing Mensual — ${month} ${year}`
-        const content = `STATUS: APROBADO\nFECHA: ${new Date().toISOString().split('T')[0]}\n\n${JSON.stringify(briefing, null, 2)}`
+        // Si el briefing tiene contenido de texto, usarlo directamente. Si no, convertir a JSON
+        const briefingContent = (briefing as any)?.content || (briefing as any)?.loadedContent || JSON.stringify(briefing, null, 2)
+        const content = `STATUS: APROBADO\nFECHA: ${new Date().toISOString().split('T')[0]}\n\n${briefingContent}`
         const doc = await createDoc(title, content)
         docUrl = doc.url ?? ''
         docId = doc.id ?? ''
@@ -46,12 +48,15 @@ Search for:
 5. CONFOTUR and investment incentive news
 6. Golf lifestyle and luxury Caribbean property trends for ${month} ${year}
 
-Use web search to find real, current information.`
+Use web search to find real, current information.
+
+Format the brief as readable, well-structured text with clear sections and bullet points. Do NOT return JSON.`
 
     const raw = await runSkill('briefing', prompt, true)
-    const generatedBriefing = parseJSON(raw)
+    // Devolver el texto directamente como contenido humanamente legible
+    const briefingText = typeof raw === 'string' ? raw : String(raw)
 
-    return NextResponse.json({ briefing: generatedBriefing })
+    return NextResponse.json({ briefing: { content: briefingText } })
   } catch (err: unknown) {
     console.error('Briefing error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

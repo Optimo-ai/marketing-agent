@@ -18,21 +18,27 @@ function getKey(): string {
 }
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
+  const DELAYS = [5_000, 10_000, 20_000]
   for (let i = 0; i < retries; i++) {
+    const controller = new AbortController()
+    const timeoutId  = setTimeout(() => controller.abort(), 30_000)
     try {
-      const res = await fetch(url, options)
+      const res = await fetch(url, { ...options, signal: controller.signal })
+      clearTimeout(timeoutId)
       if (res.ok) return res
       if (res.status >= 500 && res.status <= 599) {
         console.warn(`[higgsfield] API HTTP ${res.status}, reintento ${i + 1}/${retries}...`)
         if (i === retries - 1) return res
-        await new Promise(r => setTimeout(r, 3000 * (i + 1)))
+        await new Promise(r => setTimeout(r, DELAYS[i] ?? 20_000))
       } else {
         return res
       }
-    } catch (err) {
-      console.warn(`[higgsfield] Network error, reintento ${i + 1}/${retries}...`, err)
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+      const isAbort = err?.name === 'AbortError'
+      console.warn(`[higgsfield] ${isAbort ? 'Request timeout (30s)' : 'Network error'}, reintento ${i + 1}/${retries}...`)
       if (i === retries - 1) throw err
-      await new Promise(r => setTimeout(r, 3000 * (i + 1)))
+      await new Promise(r => setTimeout(r, DELAYS[i] ?? 20_000))
     }
   }
   throw new Error('Unreachable')

@@ -1101,20 +1101,60 @@ export default function Home() {
   }
 
   // ---- CREADOR DE STORIES ----
-  async function handleStoryImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleStoryImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = reader.result as string
-      const [header, b64] = dataUrl.split(',')
-      const mimeType = header.match(/data:([^;]+)/)?.[1] ?? 'image/jpeg'
-      setStoryImage({ base64: b64, mimeType, preview: dataUrl })
+
+    const resetStoryState = () => {
       setStoryCopies([])
       setStorySelectedCopy(null)
       setStoryRendered(null)
     }
-    reader.readAsDataURL(file)
+
+    // Fallback: FileReader directo (sin resize) si canvas falla
+    const fallbackToFileReader = () => {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string
+        if (!dataUrl) return
+        const [, b64] = dataUrl.split(',')
+        setStoryImage({ base64: b64, mimeType: file.type || 'image/jpeg', preview: dataUrl })
+        resetStoryState()
+      }
+      reader.readAsDataURL(file)
+    }
+
+    // Ruta principal: canvas resize → JPEG para evitar límite 4.5MB de Vercel
+    const objectUrl = URL.createObjectURL(file)
+    const img = new Image()
+
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      fallbackToFileReader()
+    }
+
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      try {
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (!w || !h) { fallbackToFileReader(); return }
+        if (w > 1080) { h = Math.round((h * 1080) / w); w = 1080 }
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { fallbackToFileReader(); return }
+        ctx.drawImage(img, 0, 0, w, h)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+        if (!dataUrl || dataUrl === 'data:,') { fallbackToFileReader(); return }
+        const [, b64] = dataUrl.split(',')
+        setStoryImage({ base64: b64, mimeType: 'image/jpeg', preview: dataUrl })
+        resetStoryState()
+      } catch {
+        fallbackToFileReader()
+      }
+    }
+
+    img.src = objectUrl
   }
 
   async function generateStoryCopies() {
@@ -1133,8 +1173,10 @@ export default function Home() {
           project: storyProject,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
+      const text = await res.text()
+      let data;
+      try { data = JSON.parse(text) } catch(e) { throw new Error(`Fallo del servidor (HTTP ${res.status}): la imagen podría ser muy pesada.`) }
+      if (!res.ok) throw new Error(data.error || 'Fallo en la API de Stories')
       setStoryCopies(data.copies)
       showToast(`✓ ${data.copies.length} copys generados`)
     } catch (e) {

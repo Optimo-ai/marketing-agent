@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import { ReportView } from '@/components/ReportView'
+import { CalendarView } from '@/components/CalendarView'
 
 type Phase = 'dashboard' | 'fase1' | 'fase2' | 'fase3' | 'fase4' | 'fase5' | 'reportes' | 'comparativo' | 'integraciones' | 'carga' | 'ads'
 type ContentType = 'carrusel' | 'post' | 'reel'
@@ -256,6 +257,8 @@ export default function Home() {
   const [calFilterFormat, setCalFilterFormat]   = useState('')
   const [calFilterPlatform, setCalFilterPlatform] = useState('')
   const [calFilterWeek, setCalFilterWeek]       = useState(0)
+  const [calViewMode, setCalViewMode]           = useState<'grid' | 'list'>('grid')
+  const [selectedDayStr, setSelectedDayStr]     = useState<string | null>(null)
   const [editingCopy, setEditingCopy]       = useState<Record<string|number,any>>({})
   // Generador de Ads
   const [adImage, setAdImage]           = useState<{base64:string;mimeType:string;preview:string} | null>(null)
@@ -1804,6 +1807,35 @@ export default function Home() {
     return 'plat plat-gm'
   }
 
+  // Calcular días de la grilla del calendario actual
+  const monthNamesEs = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const mIdx = monthNamesEs.indexOf(currentMonth.toLowerCase())
+  const validMonth = mIdx >= 0 ? mIdx : 0
+  const daysInMonth = new Date(currentYear, validMonth + 1, 0).getDate()
+  const firstDayOfWeek = new Date(currentYear, validMonth, 1).getDay()
+  const gridDays: (Date|null)[] = Array(firstDayOfWeek).fill(null)
+  for (let i = 1; i <= daysInMonth; i++) {
+    gridDays.push(new Date(currentYear, validMonth, i))
+  }
+  while (gridDays.length % 7 !== 0) {
+    gridDays.push(null)
+  }
+
+  const isMatchingDate = (postDay: string | undefined, d: Date | null): boolean => {
+    if (!postDay || !d) return false;
+    const s = String(postDay).trim();
+    const y = d.getFullYear();
+    const mPadded = String(d.getMonth() + 1).padStart(2, '0');
+    const dPadded = String(d.getDate()).padStart(2, '0');
+    const dUnpadded = String(d.getDate());
+    
+    return s === `${y}-${mPadded}-${dPadded}` || 
+           s.endsWith(`-${dPadded}`) || 
+           s === `${dPadded}/${mPadded}/${y}` || 
+           s === dPadded || 
+           s === dUnpadded;
+  };
+
   return (
     <>
       <Toast message={toast} />
@@ -2213,7 +2245,159 @@ export default function Home() {
                         )}
                       </div>
 
-                      {[1,2,3,4].map(week => {
+                      <div style={{display:'flex',gap:8,marginBottom:14}}>
+                        <button className={`btn btn-sm ${calViewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setCalViewMode('grid')}>📅 Vista Calendario</button>
+                        <button className={`btn btn-sm ${calViewMode === 'list' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setCalViewMode('list')}>📝 Vista Lista</button>
+                      </div>
+
+                      {calViewMode === 'grid' && (
+                        <div>
+                          <div style={{display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '16px'}}>
+                            {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map(d => (
+                              <div key={d} style={{textAlign:'center', fontWeight:600, fontSize:12, padding:'8px 0', color:'var(--text2)'}}>{d}</div>
+                            ))}
+                            {gridDays.map((d, i) => {
+                              if (!d) return <div key={i} style={{background: 'transparent', minHeight: '100px'}} />
+                              const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+                              const dayPosts = calendar.filter(p => {
+                                if (calFilterBrand && !((p.project ?? '') as string).toLowerCase().includes(calFilterBrand.toLowerCase())) return false
+                                if (calFilterFormat && !((p.format ?? '') as string).toLowerCase().includes(calFilterFormat.toLowerCase())) return false
+                                if (calFilterPlatform && !(p.platforms as string[] ?? []).some((pl: string) => pl.toLowerCase().includes(calFilterPlatform.toLowerCase()))) return false
+                                if (calFilterWeek && p.week !== calFilterWeek) return false
+                              return isMatchingDate(p.suggestedDay, d);
+                              })
+                              const isSelected = selectedDayStr === dateStr
+                              return (
+                                <div key={i} onClick={() => setSelectedDayStr(isSelected ? null : dateStr)}
+                                  style={{background: isSelected ? 'var(--surface)' : 'var(--surface2)', border: isSelected ? '2px solid var(--teal)' : '1px solid var(--border)', borderRadius: '8px', padding: '8px', minHeight: '100px', cursor: 'pointer', transition: 'all 0.2s'}}>
+                                  <div style={{fontWeight:600, fontSize:12, color: isSelected ? 'var(--teal)' : 'var(--text)', marginBottom: '8px'}}>{d.getDate()}</div>
+                                  <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                                    {dayPosts.map((p, idx) => {
+                                      const globalIdx = calendar.indexOf(p)
+                                      const isApproved = approvedPosts.has(globalIdx)
+                                      const isRejected = rejectedPosts.has(globalIdx)
+                                      let bgColor = 'var(--bg)', color = 'var(--text)'
+                                      if (isApproved) { bgColor = 'rgba(45,212,191,0.15)'; color = 'var(--teal)' }
+                                      else if (isRejected) { bgColor = 'rgba(239,68,68,0.15)'; color = 'var(--red)' }
+                                      return (
+                                        <div key={idx} style={{fontSize: 10, padding: '4px 6px', borderRadius: '4px', background: bgColor, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: `1px solid ${isApproved ? 'var(--teal)' : isRejected ? 'var(--red)' : 'var(--border)'}`}}>
+                                          {p.name}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          
+                          {selectedDayStr && (
+                            <div style={{padding: '16px', background: 'var(--surface2)', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '16px'}}>
+                              <div style={{fontSize: 16, fontWeight: 600, marginBottom: '16px', display:'flex', justifyContent:'space-between'}}>
+                                <span>Detalle del día {selectedDayStr}</span>
+                                <button className="btn btn-xs btn-ghost" onClick={() => setSelectedDayStr(null)}>✕ Cerrar</button>
+                              </div>
+                              {(() => {
+                              const detailDate = new Date(`${selectedDayStr}T12:00:00Z`);
+                              const dayPosts = calendar.filter(p => isMatchingDate(p.suggestedDay, detailDate));
+                                if (dayPosts.length === 0) return <div style={{fontSize:13, color:'var(--text3)'}}>No hay posts programados para este día.</div>
+                                return (
+                                  <div className="post-list">
+                                    {dayPosts.map((post, idx) => {
+                                      const globalIdx = calendar.indexOf(post)
+                                      const isApproved = approvedPosts.has(globalIdx)
+                                      const isRejected = rejectedPosts.has(globalIdx)
+                                      return (
+                                        <div key={idx} className={`post-row${isApproved ? ' approved' : isRejected ? ' rejected' : ''}`}>
+                                          <div className="post-num">{globalIdx + 1}</div>
+                                          <div className="post-body">
+                                            <div className="post-name">{post.name}</div>
+                                            <div className="post-meta">
+                                              <span className={formatChip(post.format)}>{post.format}</span>
+                                              <span className={projectChip(post.project)}>{post.project}</span>
+                                              {post.keyword && <span style={{fontSize:10,color:'var(--text3)',fontFamily:'var(--mono)'}}>key: {post.keyword}</span>}
+                                            </div>
+                                            <div style={{marginTop: 8, padding: 12, background: 'var(--surface)', borderRadius: 6, fontSize: 13, color: 'var(--text)'}}>
+                                              <div style={{marginBottom: 6}}><strong style={{color:'var(--text2)'}}>Dirección de contenido:</strong><br/> {post.contentDirection}</div>
+                                              <div><strong style={{color:'var(--text2)'}}>Media necesaria:</strong><br/> {post.mediaNeeded}</div>
+                                            </div>
+                                          </div>
+                                          {!calendarApproved && (
+                                            <div className="post-actions">
+                                              <button className={`action-btn approve${isApproved ? ' approved' : ''}`} onClick={() => { const newA = new Set(approvedPosts); const newR = new Set(rejectedPosts); if (isApproved) { newA.delete(globalIdx) } else { newA.add(globalIdx); newR.delete(globalIdx) }; setApprovedPosts(newA); setRejectedPosts(newR) }}>✓</button>
+                                              <button className={`action-btn reject${isRejected ? ' rejected-state' : ''}`} onClick={() => { const newA = new Set(approvedPosts); const newR = new Set(rejectedPosts); if (isRejected) { newR.delete(globalIdx) } else { newR.add(globalIdx); newA.delete(globalIdx) }; setApprovedPosts(newA); setRejectedPosts(newR) }}>✕</button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )}
+                        
+                        {(() => {
+                          const scheduledIds = new Set();
+                          gridDays.forEach(d => {
+                            if(d) {
+                              calendar.forEach((p, idx) => {
+                                if (isMatchingDate(p.suggestedDay, d)) scheduledIds.add(idx);
+                              })
+                            }
+                          });
+                          const unscheduledPosts = calendar.filter((_, idx) => !scheduledIds.has(idx)).filter(p => {
+                            if (calFilterBrand && !((p.project ?? '') as string).toLowerCase().includes(calFilterBrand.toLowerCase())) return false;
+                            if (calFilterFormat && !((p.format ?? '') as string).toLowerCase().includes(calFilterFormat.toLowerCase())) return false;
+                            if (calFilterPlatform && !(p.platforms as string[] ?? []).some((pl: string) => pl.toLowerCase().includes(calFilterPlatform.toLowerCase()))) return false;
+                            if (calFilterWeek && p.week !== calFilterWeek) return false;
+                            return true;
+                          });
+                          
+                          if (unscheduledPosts.length === 0) return null;
+                          
+                          return (
+                            <div style={{padding: '16px', background: 'var(--surface2)', borderRadius: '8px', border: '1px dashed var(--border)', marginBottom: '16px'}}>
+                              <div style={{fontSize: 14, fontWeight: 600, marginBottom: '12px', color: 'var(--text)'}}>Posts sin fecha exacta asignada ({unscheduledPosts.length})</div>
+                              <div className="post-list">
+                                {unscheduledPosts.map((post, relativeIdx) => {
+                                  const globalIdx = calendar.indexOf(post);
+                                  const isApproved = approvedPosts.has(globalIdx);
+                                  const isRejected = rejectedPosts.has(globalIdx);
+                                  return (
+                                    <div key={`unsched-${globalIdx}`} className={`post-row${isApproved ? ' approved' : isRejected ? ' rejected' : ''}`}>
+                                      <div className="post-num">{globalIdx + 1}</div>
+                                      <div className="post-body">
+                                        <div className="post-name">{post.name}</div>
+                                        <div className="post-meta">
+                                          <span className="post-date">{post.suggestedDay || 'Sin fecha'}</span>
+                                          <span className={formatChip(post.format)}>{post.format}</span>
+                                          <span className={projectChip(post.project)}>{post.project}</span>
+                                        </div>
+                                        <div style={{marginTop: 8, padding: 12, background: 'var(--surface)', borderRadius: 6, fontSize: 13, color: 'var(--text)'}}>
+                                          <div style={{marginBottom: 6}}><strong style={{color:'var(--text2)'}}>Dirección de contenido:</strong><br/> {post.contentDirection}</div>
+                                          <div><strong style={{color:'var(--text2)'}}>Media necesaria:</strong><br/> {post.mediaNeeded}</div>
+                                        </div>
+                                      </div>
+                                      {!calendarApproved && (
+                                        <div className="post-actions">
+                                          <button className={`action-btn approve${isApproved ? ' approved' : ''}`} onClick={() => { const newA = new Set(approvedPosts); const newR = new Set(rejectedPosts); if (isApproved) { newA.delete(globalIdx) } else { newA.add(globalIdx); newR.delete(globalIdx) }; setApprovedPosts(newA); setRejectedPosts(newR) }}>✓</button>
+                                          <button className={`action-btn reject${isRejected ? ' rejected-state' : ''}`} onClick={() => { const newA = new Set(approvedPosts); const newR = new Set(rejectedPosts); if (isRejected) { newR.delete(globalIdx) } else { newR.add(globalIdx); newA.delete(globalIdx) }; setApprovedPosts(newA); setRejectedPosts(newR) }}>✕</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+                        </div>
+                      )}
+
+                      {calViewMode === 'list' && (
+                        <>
+                          {[1,2,3,4].map(week => {
                         const weekPosts = calendar.filter(p => {
                           if (calFilterWeek && p.week !== week) return false
                           if (!calFilterWeek && p.week !== week) return false
@@ -2292,7 +2476,9 @@ export default function Home() {
                             {week < 4 && <div className="divider"/>}
                           </div>
                         )
-                      })}
+                          })}
+                        </>
+                      )}
 
                       {!calendarApproved && (
                         <>

@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       
       const prompt = `Today's date: ${today}.
 CRITICAL INSTRUCTION: Do NOT generate any posts with suggestedDay before today (${today}).
+CRITICAL INSTRUCTION: "suggestedDay" MUST be a specific date in exactly YYYY-MM-DD format (e.g. 2026-05-14).
 CRITICAL INSTRUCTION: Do NOT generate any "Reel" or "Video" formats for now. ONLY generate image-based formats (e.g., "Carousel", "Foto", "Story", "Lead Magnet").
 
 Generate the content calendar for ${month} ${year}.

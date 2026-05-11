@@ -8,12 +8,13 @@ function getClient(): Anthropic {
 
 const SKILLS = {
 
-  briefing: `RESPOND WITH ONLY JSON. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
-Each field: {month:string, year:number, contextoReferencia:string, desempenoAnuncios:string, actividadCompetencia:string, tendenciasContenido:string, noticiasSector:string, diarioObras:string, insightsClave:array}
-Return: JSON object only.`,
+  briefing: `Generate a comprehensive and highly readable marketing briefing in Markdown format.
+Include clear headings, bullet points, and paragraphs.
+Do NOT return JSON. Format the output directly as readable text.`,
 
   calendar: `RESPOND WITH ONLY JSON ARRAY. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
-Each post: {id:number, name:string, format:string, project:string, platforms:[], week:1-4, suggestedDay:string, contentDirection:string, mediaNeeded:string, keyword:string|null}
+Each post: {id:number, name:string, format:string, project:string, platforms:[], week:1-4, suggestedDay:string(YYYY-MM-DD), contentDirection:string, mediaNeeded:string, keyword:string|null}
+CRITICAL RULE: "suggestedDay" MUST be a specific date in exactly YYYY-MM-DD format.
 CRITICAL RULE: You MUST maximize the use of "Carousel" and "Reel" formats. Generate at least 80% Carousels and Reels. Avoid "Foto" or "Post" unless strictly necessary.
 ALL GENERATED TEXT (name, contentDirection, mediaNeeded, keyword) MUST BE STRICTLY IN ENGLISH.
 Return: JSON array only.`,

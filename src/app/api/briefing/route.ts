@@ -52,9 +52,9 @@ Use web search to find real, current information.
 
 Format the brief as readable, well-structured text with clear sections and bullet points. Do NOT return JSON.`
 
-    const raw = await runSkill('briefing', prompt, true)
+    const raw = await runSkill('briefing', prompt, false)
     // Devolver el texto directamente como contenido humanamente legible
-    const briefingText = typeof raw === 'string' ? raw : String(raw)
+    const briefingText = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2)
 
     return NextResponse.json({ briefing: { content: briefingText } })
   } catch (err: unknown) {

@@ -166,12 +166,12 @@ const aria: BrandConfig = {
   },
 }
 
-// ─── KASA LIVING (+ KASA PUNTA CANA RESIDENCES) ──────────────────────────────
-// Downtown Punta Cana · 109 aptos · Inversión + renta turística + gestión hotelera
-// Kasa Residences (entregado) + Kasa Living (en construcción, Q1 2025)
+// ─── KASA LIVING ──────────────────────────────────────────────────────────────
+// Downtown Punta Cana · Inversión + renta turística + gestión hotelera integrada
 // CONFOTUR · Cocina italiana modular · Smart home · Todo incluido desde día 1
 // 24 terrazas privadas con jacuzzi y BBQ · Acceso peatonal a Aria (80+ locales)
 // Ecosistema: Dolphin Discovery, Coco Bongo, Hard Rock, Mall, IKEA, Hilton GI
+// Nota: Kasa Residences fue el proyecto anterior (entregado). Este es Kasa Living.
 const kasa: BrandConfig = {
   displayName: 'Kasa Living',
   tagline: 'Lifestyle',
@@ -199,11 +199,11 @@ const kasa: BrandConfig = {
     logoPosition: 'top-left', logoSize: 0.058,
     editorialStyle: true,
   },
-  // Inversión activa · Renta vacacional · Gestión hotelera integrada · CONFOTUR
-  // Pisos porcelanato importado español · Cocina italiana modular · Smart home
+  // Kasa Living — el proyecto activo de inversión en Downtown Punta Cana
+  // Renta vacacional gestionada · CONFOTUR · Smart home · Cocina italiana
   // Walkable: Dolphin Discovery, Coco Bongo, Hard Rock, IKEA, Hilton Garden Inn
-  // 24 terrazas privadas con jacuzzi y BBQ · Acceso a Aria (80+ comercios)
-  aiPromptBase: 'vibrant urban tropical investment apartment photography Downtown Punta Cana Dominican Republic, walkable city lifestyle steps from Dolphin Discovery Coco Bongo Hard Rock Café IKEA Hilton Garden Inn, luxury turnkey apartments with imported Spanish porcelain floors Italian modular kitchen smart home automation smart blinds and locks, rooftop private terrace with jacuzzi and BBQ overlooking urban Punta Cana, orange #dd9560 and pink #a34b75 and purple #68438a and olive #969a55 color-block editorial palette, fashion-forward urban real estate photography, active energetic ambitious Caribbean urban atmosphere, young sophisticated investors and professionals, CONFOTUR tax benefit investment property',
+  // 24 terrazas privadas con jacuzzi y BBQ · Acceso peatonal a Aria (80+ comercios)
+  aiPromptBase: 'KASA Living luxury investment apartments Downtown Punta Cana Dominican Republic, modern urban residential building with rooftop terraces and jacuzzis, walkable location steps from entertainment and commerce, contemporary tropical architecture with bold color-block editorial aesthetic, orange #dd9560 pink #a34b75 purple #68438a olive #969a55 palette, imported Spanish porcelain floors Italian modular kitchen smart home technology, active urban Caribbean lifestyle photography, sophisticated investors and young professionals, CONFOTUR tax benefit turnkey rental property',
   formats: {
     post:      { w: 1080, h: 1350 },
     story:     { w: 1080, h: 1920 },

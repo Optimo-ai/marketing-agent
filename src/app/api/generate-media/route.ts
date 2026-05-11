@@ -117,32 +117,34 @@ function mapAspectRatio(w: number, h: number): {
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
-  refImageB64?: string,   // base64 → decodificado y subido a Higgsfield para image-to-image
-  refImageUrl?: string    // URL pública → fallback si el upload falla
+  refImageB64?: string,   // base64 — solo para fallback de fondo si Higgsfield falla
+  refImageUrl?: string    // URL pública HTTPS — pasada a Higgsfield para image-to-image
 ): Promise<{ buffer: Buffer | undefined; jobId?: string }> {
-  // Decodificar base64 → buffer para subir a Higgsfield
-  let refBuffer: Buffer | undefined
-  if (refImageB64) {
-    try { const [, b64] = refImageB64.split(','); refBuffer = Buffer.from(b64, 'base64') } catch {}
-  }
+  // Solo pasar URL a Higgsfield si es HTTPS pública (no localhost)
+  const isPublicUrl = refImageUrl && refImageUrl.startsWith('https://')
 
-  // ── 1. Higgsfield image-to-image — sube referencia → genera variante ─────────
+  // ── 1. Higgsfield — text-to-image con referencia visual si hay URL pública ────
   try {
     const { buffer, jobId } = await generateImageTracked({
       prompt,
       aspectRatio,
-      referenceImageBuffer: refBuffer,   // upload directo a Higgsfield media storage
-      referenceImageUrl:    refImageUrl, // fallback URL si upload falla
+      referenceImageUrl: isPublicUrl ? refImageUrl : undefined,
     })
     return { buffer, jobId }
   } catch (err: any) {
     console.warn(`[generate-media] Higgsfield no disponible (${String(err?.message ?? err).slice(0, 80)}) — usando fallback`)
   }
 
-  // ── 2. Imagen de referencia como fondo (solo si Higgsfield falla totalmente) ─
-  if (refBuffer && refBuffer.length > 5000) {
-    console.log('[generate-media] Higgsfield falló — usando referencia como fondo')
-    return { buffer: refBuffer }
+  // ── 2. Fallback: imagen de referencia como fondo (solo si Higgsfield falla) ──
+  if (refImageB64) {
+    try {
+      const [, b64] = refImageB64.split(',')
+      const buf = Buffer.from(b64, 'base64')
+      if (buf.length > 5000) {
+        console.log('[generate-media] Higgsfield falló — referencia como fondo')
+        return { buffer: buf }
+      }
+    } catch {}
   }
 
   // ── 3. Picsum Photos — fotos pro de arquitectura, gratis, sin API key ────────
@@ -179,10 +181,22 @@ async function generatePromptsFromReference(
   const [header, b64] = refImageDataUrl.split(',')
   const mimeType = (header.match(/:(.*?);/)?.[1] ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
 
-  const styleDesc = `You are a creative director for ${brandName} luxury real estate. Study this reference photo of our actual property and extract its visual DNA: architectural style, facade materials, color palette, lighting mood, landscaping, atmosphere. Use that visual DNA to write`
+  // Shot types to cycle through for variety
+  const SHOT_TYPES = [
+    'wide exterior facade shot at golden hour, dramatic sky',
+    'aerial drone view showing full building and surroundings',
+    'intimate interior amenity detail (pool, lobby, terrace, or common area)',
+    'street-level perspective showing scale and entrance',
+    'twilight/blue-hour shot with warm interior lights glowing',
+    'close-up architectural detail of materials and textures',
+  ]
+  const shotA = SHOT_TYPES[Math.floor(Math.random() * SHOT_TYPES.length)]
+  const shotB = SHOT_TYPES[Math.floor(Math.random() * SHOT_TYPES.length)]
+
+  const styleDesc = `You are a luxury real estate photographer for ${brandName}. Study this reference photo carefully and identify: the exact building style, materials, colors, key architectural features, and atmosphere. Then write`
   const promptText = count === 1
-    ? `${styleDesc} ONE cinematic AI image generation prompt for a FRESH CREATIVE SHOT of this same property — a different angle, composition, or time of day that feels like it belongs in the same luxury photoshoot but is visually distinct from this reference. Content context: ${contentDir}. Be specific about architecture details you see. Respond ONLY with the prompt string (max 100 words).`
-    : `${styleDesc} ${count} cinematic AI image generation prompts, each a DISTINCT CREATIVE SHOT of this same property — different angles, compositions, and lighting moments that all feel like they belong in the same luxury photoshoot. Content context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
+    ? `${styleDesc} ONE cinematic image generation prompt showing this exact property as a "${shotA}". The prompt must mention 2-3 specific visual details you see in this photo. Content context: ${contentDir}. Respond ONLY with the prompt string (max 100 words).`
+    : `${styleDesc} ${count} distinct image generation prompts for this exact property. Shot 1: "${shotA}". Shot 2: "${shotB}". Each prompt must mention specific visual details from the reference and describe a clearly different scene. Content context: ${contentDir}. Respond ONLY with a JSON array: ["prompt1", "prompt2"]. No explanations.`
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',

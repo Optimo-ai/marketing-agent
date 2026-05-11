@@ -9,7 +9,7 @@ export const maxDuration = 60
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const BRAND_VOICE: Record<string, string> = {
-  'KASA':          'KASA Living — affordable multifamily residences, community, modern comfort, family lifestyle',
+  'KASA':          'KASA Living — luxury investment apartments Downtown Punta Cana, short-term rental income, CONFOTUR tax benefits, smart home, Italian kitchen, rooftop jacuzzi & BBQ, walkable to Dolphin Discovery / Hard Rock / IKEA',
   'Arko':          'Arko Golf & Residences — golf, resort lifestyle, exclusivity, nature, premium second home',
   'Aria':          'Aria Suites — premium suite, hospitality, luxury services, unique experiences, investment',
   'Noriega Group': 'Noriega Group — visionary real estate development, legacy, quality of life, Dominican Republic',

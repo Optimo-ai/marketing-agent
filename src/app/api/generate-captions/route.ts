@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const CAPTION_SKILL = `Eres el agente de redes sociales del Grupo Noriega — empresa inmobiliaria en República Dominicana.
-Proyectos activos: KASA Punta Cana Residences y Arko Golf & Residences (Vista Cana, Higüey).
+Proyectos activos: KASA Living (Downtown Punta Cana, apartamentos de inversión con renta turística) y Arko Golf & Residences (Vista Cana, Higüey).
 Voz de marca: Profesional pero cálida. Aspiracional. Confiable. Idioma principal: español.
 
 Analiza el contenido visual o la descripción provista y genera captions listos para publicar.

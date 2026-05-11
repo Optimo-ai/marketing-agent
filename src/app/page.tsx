@@ -3078,6 +3078,22 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+                  ) : (
+                    <div style={{textAlign: 'center', padding: '40px 0', background: 'var(--surface2)', borderRadius: 'var(--r-sm)'}}>
+                      <div className="alert alert-amber" style={{marginBottom: 16}}>
+                        No se generaron diseños. Es posible que el servidor de Higgsfield haya tardado demasiado o todos los posts fallaron.
+                        {aiMediaErrors.length > 0 && (
+                          <div style={{marginTop: 12, textAlign: 'left'}}>
+                            <strong style={{color: 'var(--text)'}}>Errores detectados:</strong>
+                            {aiMediaErrors.map((e: any, i: number) => (
+                              <div key={i} style={{fontSize: 12, marginTop: 6, color: 'var(--red)'}}>✕ {e.postName}: {e.error}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button className="btn btn-sm" onClick={() => setFase3Step('idle')}>← Volver a intentar</button>
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -3404,23 +3420,6 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
-                  </div>
-                  ) : (
-                    <div style={{textAlign: 'center', padding: '40px 0', background: 'var(--surface2)', borderRadius: 'var(--r-sm)'}}>
-                      <div className="alert alert-amber" style={{marginBottom: 16}}>
-                        No se generaron diseños. Es posible que el servidor de Higgsfield haya tardado demasiado o todos los posts fallaron.
-                        {aiMediaErrors.length > 0 && (
-                          <div style={{marginTop: 12, textAlign: 'left'}}>
-                            <strong style={{color: 'var(--text)'}}>Errores detectados:</strong>
-                            {aiMediaErrors.map((e: any, i: number) => (
-                              <div key={i} style={{fontSize: 12, marginTop: 6, color: 'var(--red)'}}>✕ {e.postName}: {e.error}</div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <button className="btn btn-sm" onClick={() => setFase3Step('idle')}>← Volver a intentar</button>
-                    </div>
-                  )
                 )}
               </div>
             )}

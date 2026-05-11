@@ -5,7 +5,7 @@ import jsPDF from 'jspdf'
 import { ReportView } from '@/components/ReportView'
 import { CalendarView } from '@/components/CalendarView'
 
-type Phase = 'dashboard' | 'fase1' | 'fase2' | 'fase3' | 'fase4' | 'fase5' | 'reportes' | 'comparativo' | 'integraciones' | 'carga' | 'ads'
+type Phase = 'dashboard' | 'fase1' | 'fase2' | 'fase3' | 'fase4' | 'fase5' | 'reportes' | 'comparativo' | 'integraciones' | 'carga' | 'ads' | 'stories'
 type ContentType = 'carrusel' | 'post' | 'reel'
 type ContentStatus = 'borrador' | 'revision' | 'aprobado' | 'programado' | 'publicado'
 
@@ -304,6 +304,15 @@ export default function Home() {
   const [showCalendarPreview, setShowCalendarPreview] = useState(false)
   const [generatingAllCaptions, setGeneratingAllCaptions] = useState(false)
   const [previewMedia, setPreviewMedia] = useState<{url: string, type: string} | null>(null)
+
+  // Creador de Stories
+  const [storyImage, setStoryImage] = useState<{base64:string;mimeType:string;preview:string} | null>(null)
+  const [storyProject, setStoryProject] = useState('KASA')
+  const [storyCopies, setStoryCopies] = useState<string[]>([])
+  const [storyLoading, setStoryLoading] = useState(false)
+  const [storyRendered, setStoryRendered] = useState<string | null>(null)
+  const [storyRendering, setStoryRendering] = useState(false)
+  const [storySelectedCopy, setStorySelectedCopy] = useState<string | null>(null)
 
   const showToast = useCallback((msg: string) => {
     setToast(msg)
@@ -1088,6 +1097,83 @@ export default function Home() {
       showToast('Error GHL: ' + String(e))
     } finally {
       setAdSending(false)
+    }
+  }
+
+  // ---- CREADOR DE STORIES ----
+  async function handleStoryImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      const [header, b64] = dataUrl.split(',')
+      const mimeType = header.match(/data:([^;]+)/)?.[1] ?? 'image/jpeg'
+      setStoryImage({ base64: b64, mimeType, preview: dataUrl })
+      setStoryCopies([])
+      setStorySelectedCopy(null)
+      setStoryRendered(null)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function generateStoryCopies() {
+    if (!storyImage) { showToast('Sube una imagen primero'); return }
+    setStoryLoading(true)
+    setStoryCopies([])
+    setStorySelectedCopy(null)
+    setStoryRendered(null)
+    try {
+      const res = await fetch('/api/stories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: storyImage.base64,
+          mimeType: storyImage.mimeType,
+          project: storyProject,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setStoryCopies(data.copies)
+      showToast(`✓ ${data.copies.length} copys generados`)
+    } catch (e) {
+      showToast('Error: ' + String(e))
+    } finally {
+      setStoryLoading(false)
+    }
+  }
+
+  async function renderStoryImage(copy: string) {
+    setStorySelectedCopy(copy)
+    setStoryRendering(true)
+    try {
+      const res = await fetch('/api/render', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignments: [{
+            postId: `story-${Date.now()}`,
+            postName: copy,
+            format: 'Story',
+            project: storyProject,
+            image: { thumbnail: storyImage?.preview },
+            contentDirection: ''
+          }]
+        })
+      })
+      const text = await res.text()
+      let data;
+      try { data = JSON.parse(text) } catch(e) { throw new Error(`Fallo JSON servidor HTTP ${res.status}`) }
+      if (!res.ok) throw new Error(data.error || 'Error renderizando story')
+      if (data.posts && data.posts.length > 0) {
+        setStoryRendered(data.posts[0].imageUrl || data.posts[0].dataUrl)
+        showToast('✓ Story lista para descargar')
+      }
+    } catch (e) {
+      showToast('Error: ' + String(e))
+    } finally {
+      setStoryRendering(false)
     }
   }
 
@@ -1931,6 +2017,9 @@ export default function Home() {
             <div className={`nav-item${phase === 'ads' ? ' active' : ''}`} onClick={() => navTo('ads')}>
               Generador de Ads
             </div>
+            <div className={`nav-item${phase === 'stories' ? ' active' : ''}`} onClick={() => navTo('stories')}>
+              Creador de Stories
+            </div>
 
             <div className="nav-section">Reportes</div>
             <div className={`nav-item${phase === 'reportes' ? ' active' : ''}`} onClick={() => navTo('reportes')}>Desempeño mensual</div>
@@ -1967,6 +2056,7 @@ export default function Home() {
                    phase === 'fase5' ? 'Fase 5 — Programar en GHL' :
                    phase === 'carga' ? 'Carga Rápida' :
                    phase === 'ads'   ? 'Generador de Ads' :
+                   phase === 'stories' ? 'Creador de Stories' :
                    phase === 'reportes' ? 'Reporte Mensual' :
                    phase === 'comparativo' ? 'Mes vs Mes' :
                    'Integraciones'}
@@ -4233,6 +4323,133 @@ export default function Home() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* === CREADOR DE STORIES === */}
+            {phase === 'stories' && (
+              <div>
+                <div className="card" style={{marginBottom:16}}>
+                  <div className="card-header">
+                    <div>
+                      <div className="card-title">📱 Creador de Stories</div>
+                      <div className="card-sub">Sube una imagen, selecciona la marca, aprueba un copy y obtén la Story con la plantilla oficial.</div>
+                    </div>
+                  </div>
+
+                  <div className="grid-2" style={{gap:20}}>
+                    {/* COLUMNA IZQUIERDA — Upload + Configuración */}
+                    <div>
+                      {/* Upload imagen */}
+                      <div style={{marginBottom:14}}>
+                        <div className="section-label" style={{marginBottom:8}}>IMAGEN (9:16 RECOMENDADO)</div>
+                        <label style={{
+                          display:'block', border:`2px dashed ${storyImage ? 'var(--teal)' : 'var(--border2)'}`,
+                          borderRadius:'var(--r)', cursor:'pointer', overflow:'hidden',
+                          background:'var(--surface2)', transition:'border-color .15s',
+                        }}>
+                          {storyImage ? (
+                            <img src={storyImage.preview} alt="Story" style={{width:'100%',aspectRatio:'9/16',objectFit:'cover',display:'block'}}/>
+                          ) : (
+                            <div style={{padding:'60px 20px',textAlign:'center',color:'var(--text3)'}}>
+                              <div style={{fontSize:32,marginBottom:8}}>📸</div>
+                              <div style={{fontSize:13}}>Click para subir imagen o render</div>
+                              <div style={{fontSize:11,marginTop:4}}>JPG, PNG, WEBP</div>
+                            </div>
+                          )}
+                          <input type="file" accept="image/*" onChange={handleStoryImageSelect} style={{display:'none'}}/>
+                        </label>
+                      </div>
+
+                      {/* Proyecto */}
+                      <div style={{marginBottom:14}}>
+                        <div className="section-label" style={{marginBottom:6}}>MARCA / PROYECTO</div>
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                          {['KASA','Arko','Aria','Noriega Group'].map(p => (
+                            <button key={p} onClick={() => setStoryProject(p)}
+                              className={`btn btn-sm ${storyProject === p ? 'btn-primary' : ''}`}>
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button className="btn btn-primary btn-block" onClick={generateStoryCopies}
+                        disabled={storyLoading || !storyImage}>
+                        {storyLoading ? '⏳ Analizando imagen...' : '✨ Generar copys para Story'}
+                      </button>
+                    </div>
+
+                    {/* COLUMNA DERECHA — Resultados */}
+                    <div>
+                      {storyLoading && (
+                        <div className="loading-state" style={{padding:'40px 0'}}>
+                          <div className="spinner"/>
+                          <div className="loading-text">Claude Vision creando copys atractivos...</div>
+                        </div>
+                      )}
+
+                      {!storyLoading && storyCopies.length === 0 && !storyRendered && (
+                        <div style={{padding:'60px 20px',textAlign:'center',color:'var(--text3)',border:'1px dashed var(--border)',borderRadius:'var(--r)',background:'var(--surface2)'}}>
+                          <div style={{fontSize:36,marginBottom:12}}>✍️</div>
+                          <div style={{fontSize:13,lineHeight:1.6}}>Las opciones de copy aparecerán aquí.<br/>Selecciona una para aplicar el estilo de la marca.</div>
+                        </div>
+                      )}
+
+                      {!storyLoading && storyCopies.length > 0 && !storyRendered && (
+                        <div>
+                          <div className="section-label" style={{marginBottom:10}}>SELECCIONA UN COPY PARA EL DISEÑO</div>
+                          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                            {storyCopies.map((copy, i) => (
+                              <button key={i} className="btn" style={{
+                                padding:'14px', background:'var(--surface2)', border:'1px solid var(--border)', 
+                                textAlign:'left', fontSize:14, borderRadius:'var(--r-sm)', color:'var(--text)',
+                                display:'flex', justifyContent:'space-between', alignItems:'center',
+                                fontWeight:500
+                              }} onClick={() => renderStoryImage(copy)}>
+                                <span>{copy}</span>
+                                <span style={{fontSize:11, color:'var(--teal)', fontWeight:600, padding:'4px 8px', background:'rgba(45,212,191,0.1)', borderRadius:12}}>Aplicar →</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {storyRendering && (
+                        <div className="loading-state" style={{padding:'40px 0'}}>
+                          <div className="spinner"/>
+                          <div className="loading-text">Aplicando marca y tipografías...</div>
+                        </div>
+                      )}
+
+                      {storyRendered && (
+                        <div>
+                          <div className="section-label" style={{marginBottom:10, color:'var(--teal)'}}>✓ STORY LISTA</div>
+                          <div style={{
+                            background:'var(--surface2)', padding:16, borderRadius:'var(--r-sm)', 
+                            border:'1px solid var(--teal)', textAlign:'center'
+                          }}>
+                            <img src={storyRendered} alt="Story Final" style={{
+                              width:'100%', maxWidth:300, aspectRatio:'9/16', objectFit:'cover', 
+                              borderRadius:8, border:'1px solid var(--border)', marginBottom:16,
+                              boxShadow:'0 4px 12px rgba(0,0,0,0.1)'
+                            }} />
+                            <div style={{display:'flex', gap:10, justifyContent:'center'}}>
+                              <button className="btn btn-sm" onClick={() => {
+                                setStoryRendered(null)
+                                setStorySelectedCopy(null)
+                              }}>← Elegir otro copy</button>
+                              
+                              <a href={storyRendered} download={`Story_${storyProject}_${Date.now()}.jpg`} className="btn btn-success">
+                                📥 Descargar
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

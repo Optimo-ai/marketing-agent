@@ -17,6 +17,27 @@ function getKey(): string {
   return key
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url, options)
+      if (res.ok) return res
+      if (res.status >= 500 && res.status <= 599) {
+        console.warn(`[higgsfield] API HTTP ${res.status}, reintento ${i + 1}/${retries}...`)
+        if (i === retries - 1) return res
+        await new Promise(r => setTimeout(r, 3000 * (i + 1)))
+      } else {
+        return res
+      }
+    } catch (err) {
+      console.warn(`[higgsfield] Network error, reintento ${i + 1}/${retries}...`, err)
+      if (i === retries - 1) throw err
+      await new Promise(r => setTimeout(r, 3000 * (i + 1)))
+    }
+  }
+  throw new Error('Unreachable')
+}
+
 // ─── TIPOS PÚBLICOS ───────────────────────────────────────────────────────────
 
 export type VideoStyle = 'cinematic' | 'lifestyle' | 'creative' | 'avatar'
@@ -55,7 +76,7 @@ export async function generateVideo(opts: HiggsfieldVideoOptions): Promise<Buffe
     ?? (opts.videoStyle ? STYLE_MODEL[opts.videoStyle] : undefined)
     ?? 'cinematic_studio_3_0'
 
-  const submitRes = await fetch(`${BASE_URL}/generations`, {
+  const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${key}`,
@@ -98,7 +119,7 @@ export async function generateImage(opts: HiggsfieldImageOptions): Promise<Buffe
   }
 
   console.log(`[higgsfield] Submitting image — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}`)
-  const submitRes = await fetch(`${BASE_URL}/generations`, {
+  const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -143,7 +164,7 @@ export async function generateAvatarVideo(opts: HiggsfieldAvatarVideoOptions): P
     setting_id:   opts.mode ?? 'ugc',
   }
 
-  const submitRes = await fetch(`${BASE_URL}/generations`, {
+  const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -172,7 +193,7 @@ export async function generateVideoTracked(opts: HiggsfieldVideoOptions): Promis
     ?? 'cinematic_studio_3_0'
 
   console.log(`[higgsfield] Submitting video (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '16:9'}`)
-  const submitRes = await fetch(`${BASE_URL}/generations`, {
+  const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, prompt: opts.prompt, aspect_ratio: opts.aspectRatio ?? '16:9', duration: opts.duration ?? 15, resolution: opts.resolution ?? '720p' }),
@@ -209,7 +230,7 @@ export async function generateImageTracked(opts: HiggsfieldImageOptions): Promis
   }
 
   console.log(`[higgsfield] Submitting image (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}`)
-  const submitRes = await fetch(`${BASE_URL}/generations`, {
+  const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

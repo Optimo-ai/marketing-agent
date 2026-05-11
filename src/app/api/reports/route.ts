@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { runSkill, parseJSON } from '@/lib/claude'
-import { getNewContactsCount, getOpportunitiesCount, getSocialPostsThisMonth } from '@/lib/ghl'
+import { getNewContactsCount, getOpportunitiesCount } from '@/lib/ghl'
 import { getAdsData, getSocialData } from '@/lib/metaAds'
 
 const MONDAY_API = 'https://api.monday.com/v2'
@@ -114,11 +114,10 @@ export async function GET(req: NextRequest) {
     const endDate   = `${year}-${monthNum}-${String(lastDay).padStart(2, '0')}`
 
     // Fetch everything in parallel
-    const [mondayStats, newContacts, opportunities, ghlPosts, adsData, socialData] = await Promise.all([
+    const [mondayStats, newContacts, opportunities, adsData, socialData] = await Promise.all([
       getBoardStats(month, year).catch(() => null),
       getNewContactsCount(startDate, endDate).catch(() => 0),
       getOpportunitiesCount().catch(() => 0),
-      getSocialPostsThisMonth(startDate, endDate).catch(() => ({ total: 0, published: 0, scheduled: 0 })),
       getAdsData(startDate, endDate).catch(() => ({ available: false, totalSpend: 0, totalImpressions: 0, totalReach: 0, totalClicks: 0, totalLeads: 0, ctr: 0, cpc: 0, roas: 0, accounts: [], campaigns: [] })),
       getSocialData(startDate, endDate).catch(() => ({
         instagram: { available: false, followers: 0, impressionsMonth: 0, reachMonth: 0, profileViews: 0, postsThisMonth: 0, avgLikes: 0, avgComments: 0, engagementRate: 0 },
@@ -187,10 +186,10 @@ CONTENT CALENDAR (Monday.com):
 - By status: ${JSON.stringify(byStatus)}
 - Board found: ${mondayStats?.boardFound ?? false}
 
-GHL SOCIAL PUBLISHING:
-- Total posts in GHL: ${ghlPosts.total}
-- Published: ${ghlPosts.published}
-- Scheduled: ${ghlPosts.scheduled}
+META SOCIAL PUBLISHING (REAL DATA):
+- Instagram posts published: ${socialData.instagram.postsThisMonth}
+- Facebook posts published: ${socialData.facebook.postsThisMonth}
+- Total posts published on Meta: ${socialData.instagram.postsThisMonth + socialData.facebook.postsThisMonth}
 
 CRM METRICS:
 - New contacts this month: ${newContacts}
@@ -219,9 +218,9 @@ Typical monthly target: 20-28 posts, at least 4 per platform, balanced across pr
         totalPosts,
         scheduled,
         schedulingRate,
-        ghlTotal:            ghlPosts.total,
-        ghlPublished:        ghlPosts.published,
-        ghlScheduled:        ghlPosts.scheduled,
+        metaPostsPublished:  socialData.instagram.postsThisMonth + socialData.facebook.postsThisMonth,
+        instagramPosts:      socialData.instagram.postsThisMonth,
+        facebookPosts:       socialData.facebook.postsThisMonth,
         newContacts,
         activeOpportunities: opportunities,
         platformsActive:     Object.keys(byPlatform).length,
@@ -235,7 +234,7 @@ Typical monthly target: 20-28 posts, at least 4 per platform, balanced across pr
       socialData,
     }
 
-    return NextResponse.json({ report, rawStats: { mondayStats, ghlPosts, newContacts, opportunities, adsData, socialData } })
+    return NextResponse.json({ report, rawStats: { mondayStats, newContacts, opportunities, adsData, socialData } })
 
   } catch (err: unknown) {
     console.error('[reports] Error:', err)

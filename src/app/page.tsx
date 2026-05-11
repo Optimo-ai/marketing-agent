@@ -71,9 +71,9 @@ interface ReportData {
     totalPosts: number
     scheduled: number
     schedulingRate: number
-    ghlTotal: number
-    ghlPublished: number
-    ghlScheduled: number
+    metaPostsPublished: number
+    instagramPosts: number
+    facebookPosts: number
     newContacts: number
     activeOpportunities: number
     platformsActive: number
@@ -1976,6 +1976,9 @@ export default function Home() {
                                 {briefing.contextoReferencia && <div style={{marginBottom: 10}}><strong style={{color:'var(--teal)'}}>Contexto:</strong><br/>{String(briefing.contextoReferencia)}</div>}
                                 {briefing.tendenciasContenido && <div style={{marginBottom: 10}}><strong style={{color:'var(--teal)'}}>Tendencias:</strong><br/>{String(briefing.tendenciasContenido)}</div>}
                                 {briefing.insightsClave && Array.isArray(briefing.insightsClave) && <div><strong style={{color:'var(--teal)'}}>Insights Clave:</strong><br/>• {briefing.insightsClave.join('\n• ')}</div>}
+                                {!briefing.contextoReferencia && !briefing.tendenciasContenido && !briefing.insightsClave && (
+                                  <div style={{whiteSpace:'pre-wrap'}}>{typeof briefing === 'object' ? JSON.stringify(briefing, null, 2) : String(briefing)}</div>
+                                )}
                               </>
                             )}
                         </div>
@@ -2116,6 +2119,13 @@ export default function Home() {
                                   <span>{insight}</span>
                                 </div>
                               ))}
+                            </div>
+                          )}
+
+                          {/* Fallback si el JSON tiene otras llaves */}
+                          {!briefing.contextoReferencia && !briefing.tendenciasContenido && !briefing.insightsClave && (
+                            <div style={{fontSize:13,lineHeight:1.8,color:'var(--text)',whiteSpace:'pre-wrap',background:'var(--surface2)',padding:'14px 16px',borderRadius:'var(--r-sm)', overflowX: 'auto'}}>
+                              {typeof briefing === 'object' ? JSON.stringify(briefing, null, 2) : String(briefing)}
                             </div>
                           )}
                         </>

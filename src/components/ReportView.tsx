@@ -10,9 +10,9 @@ interface ReportKPIs {
   totalPosts: number
   scheduled: number
   schedulingRate: number
-  ghlTotal: number
-  ghlPublished: number
-  ghlScheduled: number
+  metaPostsPublished: number
+  instagramPosts: number
+  facebookPosts: number
   newContacts: number
   activeOpportunities: number
   platformsActive: number
@@ -358,7 +358,7 @@ export function ReportView({ report }: Props) {
         {[
           { label: 'Posts planificados', value: kpis.totalPosts, icon: '📅', color: TEAL },
           { label: 'Tasa de programación', value: `${kpis.schedulingRate}%`, icon: '✅', color: kpis.schedulingRate >= 70 ? TEAL : GOLD },
-          { label: 'Publicados en GHL', value: kpis.ghlPublished, icon: '📤', color: ACCENT },
+          { label: 'Publicados en Meta', value: kpis.metaPostsPublished, icon: '📤', color: ACCENT },
           { label: 'Plataformas activas', value: kpis.platformsActive, icon: '📱', color: NAVY },
           { label: 'Nuevos contactos', value: kpis.newContacts, icon: '👥', color: GOLD },
           { label: 'Oportunidades activas', value: kpis.activeOpportunities, icon: '🎯', color: CORAL },
@@ -443,13 +443,13 @@ export function ReportView({ report }: Props) {
         )}
       </Section>
 
-      {/* ── GHL PUBLISHING ── */}
-      <Section title="Publicación en GoHighLevel" icon="🔗">
+      {/* ── META PUBLISHING ── */}
+      <Section title="Publicación en Meta (Instagram + Facebook)" icon="📱">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
           {[
-            { label: 'Total en GHL', value: kpis.ghlTotal, color: 'var(--text)' },
-            { label: 'Publicados',   value: kpis.ghlPublished, color: TEAL },
-            { label: 'Programados',  value: kpis.ghlScheduled, color: GOLD },
+            { label: 'Total Publicados', value: kpis.metaPostsPublished, color: 'var(--text)' },
+            { label: 'Instagram',   value: kpis.instagramPosts, color: '#E4405F' },
+            { label: 'Facebook',  value: kpis.facebookPosts, color: '#1877F2' },
           ].map(k => (
             <div key={k.label} style={{ background: 'var(--surface2)', borderRadius: 8, padding: '12px 14px', textAlign: 'center' }}>
               <div style={{ fontSize: 26, fontWeight: 800, color: k.color }}>{k.value}</div>
@@ -457,14 +457,16 @@ export function ReportView({ report }: Props) {
             </div>
           ))}
         </div>
-        {kpis.ghlTotal > 0 && (
-          <div style={{ height: 8, background: 'var(--surface2)', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', background: TEAL, width: `${pct(kpis.ghlPublished, kpis.ghlTotal)}%` }} />
+        {kpis.metaPostsPublished > 0 && (
+          <div>
+            <div style={{ height: 8, background: 'var(--surface2)', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
+              <div style={{ height: '100%', background: ACCENT, width: `${pct(kpis.instagramPosts, kpis.metaPostsPublished)}%` }} />
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+              {pct(kpis.instagramPosts, kpis.metaPostsPublished)}% en Instagram, {pct(kpis.facebookPosts, kpis.metaPostsPublished)}% en Facebook
+            </div>
           </div>
         )}
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-          {kpis.ghlTotal > 0 ? `${pct(kpis.ghlPublished, kpis.ghlTotal)}% publicado de los posts en GHL` : 'Sin datos de publicación en GHL este mes'}
-        </div>
       </Section>
 
       {/* ── REDES SOCIALES — MÉTRICAS REALES ── */}

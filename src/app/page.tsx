@@ -174,6 +174,24 @@ interface ManualContent {
 const DEFAULT_MONTH = new Date().toLocaleString('es-ES', { month: 'long' }).replace(/^\w/, c => c.toUpperCase())
 const DEFAULT_YEAR = new Date().getFullYear()
 
+function formatText(text: string) {
+  if (!text) return { __html: '' }
+  const html = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/^### (.*$)/gim, '<h3 style="color:var(--teal); margin: 16px 0 8px 0; font-size:15px;">$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2 style="color:var(--teal); margin: 20px 0 10px 0; font-size:18px;">$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1 style="color:var(--teal); margin: 24px 0 12px 0; font-size:22px;">$1</h1>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--text); font-weight: 700;">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^[-*] (.*$)/gim, '<li style="margin-left:20px; margin-bottom:6px;">$1</li>')
+    .replace(/\n/g, '<br/>')
+    .replace(/<\/li><br\/>/g, '</li>')
+    .replace(/<br\/><li/g, '<li')
+  return { __html: html }
+}
+
 function Toast({ message }: { message: string }) {
   return <div className={`toast ${message ? 'show' : ''}`}>{message}</div>
 }
@@ -239,15 +257,15 @@ export default function Home() {
   const [driveScanStatus, setDriveScanStatus] = useState<'idle'|'scanning'|'done'|'error'>('idle')
   // Estado de generación de video por post (para UX asíncrona)
   const [videoGenStatus, setVideoGenStatus]   = useState<Record<string|number, 'idle'|'generating'|'done'|'error'>>({})
-  // IA Media — generación automática con Claude + Fal AI + brand overlay
+  // IA Media — generación automática con Claude + Higgsfield + brand overlay
   const [aiMediaItems, setAiMediaItems]         = useState<any[]>([])
   const [aiMediaApproval, setAiMediaApproval]   = useState<Record<string|number, 'approved'|'rejected'>>({})
   const [aiMediaErrors, setAiMediaErrors]       = useState<any[]>([])
   const [aiMediaRegen, setAiMediaRegen]         = useState<Set<string|number>>(new Set())
   // Carousel slideshow — track current slide index per post
   const [carouselSlideIdx, setCarouselSlideIdx] = useState<Record<string|number, number>>({})
-  // Job IDs de Fal AI generados en esta sesión — para borrar al salir de Fase 3
-  const [sessionFalJobIds, setSessionFalJobIds] = useState<string[]>([])
+  // Job IDs de Higgsfield generados en esta sesión — para borrar al salir de Fase 3
+  const [sessionHiggsfieldJobIds, setSessionHiggsfieldJobIds] = useState<string[]>([])
   // Edición de copy con Claude en Fase 4
   const [copyEditOpen, setCopyEditOpen]         = useState<Record<string, boolean>>({})
   const [copyEditInstr, setCopyEditInstr]       = useState<Record<string, string>>({})
@@ -1071,7 +1089,7 @@ export default function Home() {
   }
 
   // ---- LIMPIEZA HIGGSFIELD — borra SOLO los jobs de esta sesión ----
-  async function cleanupFal(jobIds: string[]) {
+  async function cleanupHiggsfield(jobIds: string[]) {
     if (jobIds.length === 0) return
     try {
       await fetch('/api/fal-cleanup', {
@@ -1079,11 +1097,11 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobIds }),
       })
-      setSessionFalJobIds([])
+      setSessionHiggsfieldJobIds([])
     } catch { /* silencioso — no interrumpir el flujo principal */ }
   }
 
-  // ---- GENERACIÓN IA (Claude prompt → Fal AI → brand overlay) ----
+  // ---- GENERACIÓN IA (Claude prompt → Higgsfield → brand overlay) ----
   async function generateAIMedia() {
     if (!calendarApproved || calendar.length === 0) {
       showToast('Aprueba el calendario primero')
@@ -1092,11 +1110,11 @@ export default function Home() {
     const posts = calendar.filter((_, i) => !rejectedPosts.has(i))
     setFase3Step('ai_generating')
     setLoading(true)
-    setLoadingText(`Claude genera prompts y Fal AI crea ${posts.length} imágenes/videos...`)
+    setLoadingText(`Claude genera prompts y Higgsfield crea ${posts.length} imágenes/videos...`)
     setAiMediaItems([])
     setAiMediaApproval({})
     setAiMediaErrors([])
-    setSessionFalJobIds([])
+    setSessionHiggsfieldJobIds([])
     try {
       const allItems: any[] = [];
       const allErrors: any[] = [];
@@ -1127,9 +1145,9 @@ export default function Home() {
           if (data.items && data.items.length > 0) {
             allItems.push(...data.items);
             setAiMediaItems([...allItems]); // Actualiza estado progresivamente
-            const jobs = data.items.flatMap((m: any) => m.falJobIds ?? m.higgsfieldJobIds ?? []);
+            const jobs = data.items.flatMap((m: any) => m.higgsfieldJobIds ?? m.falJobIds ?? []);
             allJobIds.push(...jobs);
-            setSessionFalJobIds([...allJobIds]);
+            setSessionHiggsfieldJobIds([...allJobIds]);
           }
           if (data.errors && data.errors.length > 0) {
             allErrors.push(...data.errors);
@@ -1176,16 +1194,17 @@ export default function Home() {
       if (data.error) throw new Error(data.error)
       if (data.items?.[0]) {
         const newItem = data.items[0]
-        // Borrar en Fal AI los jobs viejos de este post específico
+        // Borrar en Higgsfield los jobs viejos de este post específico
         const oldItem = aiMediaItems.find(m => String(m.postId) === String(item.postId))
-        if (oldItem?.falJobIds?.length) {
-          cleanupFal(oldItem.falJobIds)
-          setSessionFalJobIds(prev =>
-            prev.filter(id => !(oldItem.falJobIds ?? []).includes(id))
-              .concat(newItem.falJobIds ?? [])
+        const oldJobs = oldItem?.higgsfieldJobIds ?? oldItem?.falJobIds ?? []
+        const newJobs = newItem?.higgsfieldJobIds ?? newItem?.falJobIds ?? []
+        if (oldJobs.length) {
+          cleanupHiggsfield(oldJobs)
+          setSessionHiggsfieldJobIds(prev =>
+            prev.filter(id => !oldJobs.includes(id)).concat(newJobs)
           )
         } else {
-          setSessionFalJobIds(prev => prev.concat(newItem.falJobIds ?? []))
+          setSessionHiggsfieldJobIds(prev => prev.concat(newJobs))
         }
         setAiMediaItems(prev => prev.map(m =>
           String(m.postId) === String(item.postId) ? newItem : m
@@ -1284,8 +1303,8 @@ export default function Home() {
 
       navTo('fase4')
 
-      // Borrar de Fal AI los jobs de esta sesión (ya descargados localmente)
-      cleanupFal(sessionFalJobIds)
+      // Borrar de Higgsfield los jobs de esta sesión (ya descargados localmente)
+      cleanupHiggsfield(sessionHiggsfieldJobIds)
 
       // Generar copy automáticamente al llegar a Fase 4
       setLoadingText('Redactando copy por plataforma con Claude...')
@@ -2002,16 +2021,16 @@ export default function Home() {
                           <div><div className="card-title">Resumen del Briefing</div><div className="card-sub">{currentMonth} {currentYear}</div></div>
                           <button className="btn btn-sm" onClick={() => navTo('fase1')}>Ver completo →</button>
                         </div>
-                        <div style={{fontSize: 12, lineHeight: 1.6, color: 'var(--text)', background: 'var(--surface2)', padding: 14, borderRadius: 'var(--r-sm)', maxHeight: 250, overflowY: 'auto', whiteSpace: 'pre-wrap'}}>
-                          {typeof briefing.loadedContent === 'string'
-                            ? String(briefing.loadedContent)
+                    <div style={{fontSize: 12, lineHeight: 1.6, color: 'var(--text2)', background: 'var(--surface2)', padding: 14, borderRadius: 'var(--r-sm)', maxHeight: 250, overflowY: 'auto'}}>
+                      {(briefing.loadedContent || briefing.content)
+                        ? <div dangerouslySetInnerHTML={formatText(String(briefing.loadedContent || briefing.content))} />
                             : (
                               <>
                                 {briefing.contextoReferencia && <div style={{marginBottom: 10}}><strong style={{color:'var(--teal)'}}>Contexto:</strong><br/>{String(briefing.contextoReferencia)}</div>}
                                 {briefing.tendenciasContenido && <div style={{marginBottom: 10}}><strong style={{color:'var(--teal)'}}>Tendencias:</strong><br/>{String(briefing.tendenciasContenido)}</div>}
                                 {briefing.insightsClave && Array.isArray(briefing.insightsClave) && <div><strong style={{color:'var(--teal)'}}>Insights Clave:</strong><br/>• {briefing.insightsClave.join('\n• ')}</div>}
                                 {!briefing.contextoReferencia && !briefing.tendenciasContenido && !briefing.insightsClave && (
-                                  <div style={{whiteSpace:'pre-wrap'}}>{typeof briefing === 'object' ? JSON.stringify(briefing, null, 2) : String(briefing)}</div>
+                              <div style={{whiteSpace:'pre-wrap', color:'var(--text)'}}>{typeof briefing === 'object' ? JSON.stringify(briefing, null, 2) : String(briefing)}</div>
                                 )}
                               </>
                             )}
@@ -2101,9 +2120,9 @@ export default function Home() {
 
                       {/* Mostrar briefing como texto legible humanamente */}
                       {briefing && (briefing.content || briefing.loadedContent) && (
-                        <div style={{fontSize:13,lineHeight:1.8,color:'var(--text)',whiteSpace:'pre-wrap',background:'var(--surface2)',padding:'14px 16px',borderRadius:'var(--r-sm)',maxHeight:'600px',overflowY:'auto'}}>
-                          {String(briefing.content || briefing.loadedContent)}
-                        </div>
+                        <div style={{fontSize:13,lineHeight:1.8,color:'var(--text2)',background:'var(--surface2)',padding:'16px 20px',borderRadius:'var(--r-sm)',maxHeight:'600px',overflowY:'auto'}}
+                          dangerouslySetInnerHTML={formatText(String(briefing.content || briefing.loadedContent))}
+                        />
                       )}
                     </div>
 
@@ -2572,11 +2591,11 @@ export default function Home() {
                     <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid var(--border)'}}>
                       <div style={{fontSize:11,color:'var(--text3)',letterSpacing:'.06em',fontWeight:600,marginBottom:6}}>MODO IA COMPLETO — SIN SUBIR IMÁGENES</div>
                       <div style={{fontSize:12,color:'var(--text)',lineHeight:1.6,marginBottom:12}}>
-                        Claude genera un prompt creativo para cada post del calendario, Fal AI crea la imagen o video con estilo fotorrealista, y se aplica el brand overlay automáticamente. Tú solo apruebas o rechazas antes de enviar a GHL.
+                        Claude genera un prompt creativo para cada post del calendario, Higgsfield crea la imagen o video con estilo fotorrealista, y se aplica el brand overlay automáticamente. Tú solo apruebas o rechazas antes de enviar a GHL.
                       </div>
                       <button className="btn btn-primary" onClick={generateAIMedia} disabled={!calendarApproved}
                         style={{background:'linear-gradient(135deg,var(--purple),var(--accent,#952a95))'}}>
-                        Generar todo con IA (Claude + Fal AI) →
+                        Generar todo con IA (Claude + Higgsfield) →
                       </button>
                       {!calendarApproved && (
                         <div style={{fontSize:11,color:'var(--text3)',marginTop:6}}>Requiere calendario aprobado en Fase 2</div>
@@ -2604,7 +2623,7 @@ export default function Home() {
                     <div className="spinner" style={{margin:'0 auto 16px'}}/>
                     <div style={{fontSize:14,fontWeight:600,marginBottom:8}}>{loadingText}</div>
                     <div style={{fontSize:12,color:'var(--text3)',lineHeight:1.7}}>
-                      Claude escribe los prompts · Fal AI genera las imágenes/videos · se aplica el estilo de marca<br/>
+                      Claude escribe los prompts · Higgsfield genera las imágenes/videos · se aplica el estilo de marca<br/>
                       Las imágenes tardan ~1–2 min, los videos 2–5 min cada uno
                     </div>
                   </div>
@@ -2739,7 +2758,7 @@ export default function Home() {
                                         <div className="spinner" style={{width:14,height:14,borderWidth:2,flexShrink:0}}/>
                                         <span style={{fontSize:11,fontWeight:600,color:'var(--text)'}}>Generando video de marca...</span>
                                       </div>
-                                      <div style={{fontSize:10,color:'var(--text3)'}}>Fal AI tarda 2–5 min. Puedes seguir revisando otros posts.</div>
+                                      <div style={{fontSize:10,color:'var(--text3)'}}>Higgsfield tarda 2–5 min. Puedes seguir revisando otros posts.</div>
                                     </div>
                                   ) : videoGenStatus[post.postId] === 'done' ? (
                                     <div style={{fontSize:11,color:'var(--teal)',fontWeight:600,padding:'6px 0'}}>✓ Video de marca generado</div>
@@ -2990,7 +3009,7 @@ export default function Home() {
                               <button
                                 onClick={() => regenerateOneAIMedia(item)}
                                 disabled={isRegen}
-                                title="Regenerar con Fal AI"
+                                title="Regenerar con Higgsfield"
                                 style={{padding:'6px 10px',fontSize:13,borderRadius:4,cursor:'pointer',border:'1px solid var(--border)',background:'var(--surface2)',color:'var(--text)'}}>
                                 ↻
                               </button>
@@ -3014,7 +3033,7 @@ export default function Home() {
                       </div>
                       <div style={{display:'flex',gap:8}}>
                         <button className="btn btn-sm" onClick={() => {
-                          cleanupFal(sessionFalJobIds)
+                          cleanupHiggsfield(sessionHiggsfieldJobIds)
                           setAiMediaItems([])
                           setAiMediaApproval({})
                           setFase3Step('idle')

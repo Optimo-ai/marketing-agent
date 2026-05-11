@@ -100,7 +100,7 @@ async function generateAnyImage(
   referenceImage?: string
 ): Promise<{ buffer: Buffer; jobId?: string }> {
   try {
-    const { buffer, jobId } = await generateImageTracked({ prompt, aspectRatio })
+    const { buffer, jobId } = await generateImageTracked({ prompt, aspectRatio, referenceImage })
     return { buffer, jobId }
   } catch (err: any) {
     const msg = String(err?.message ?? err)

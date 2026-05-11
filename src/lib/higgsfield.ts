@@ -43,6 +43,7 @@ export interface HiggsfieldImageOptions {
   aspectRatio?: '1:1' | '4:3' | '3:4' | '16:9' | '9:16'  // default 1:1
   resolution?:  '1k' | '2k' | '4k'                         // default 1k
   model?:       string                                       // default nano_banana_2
+  referenceImage?: string                                    // Data URL en Base64
 }
 
 // ─── GENERACIÓN DE VIDEO ──────────────────────────────────────────────────────
@@ -86,11 +87,21 @@ export async function generateImage(opts: HiggsfieldImageOptions): Promise<Buffe
   const key   = getKey()
   const model = opts.model ?? 'nano_banana_flash'
 
+  const payload: any = {
+    model,
+    prompt: opts.prompt,
+    aspect_ratio: opts.aspectRatio ?? '1:1',
+    resolution: opts.resolution ?? '1k'
+  }
+  if (opts.referenceImage) {
+    payload.image_url = opts.referenceImage
+  }
+
   console.log(`[higgsfield] Submitting image — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}`)
   const submitRes = await fetch(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt: opts.prompt, aspect_ratio: opts.aspectRatio ?? '1:1', resolution: opts.resolution ?? '1k' }),
+    body: JSON.stringify(payload),
   })
 
   if (!submitRes.ok) {
@@ -187,11 +198,21 @@ export async function generateImageTracked(opts: HiggsfieldImageOptions): Promis
   const key   = getKey()
   const model = opts.model ?? 'nano_banana_flash'
 
+  const payload: any = {
+    model,
+    prompt: opts.prompt,
+    aspect_ratio: opts.aspectRatio ?? '1:1',
+    resolution: opts.resolution ?? '1k'
+  }
+  if (opts.referenceImage) {
+    payload.image_url = opts.referenceImage
+  }
+
   console.log(`[higgsfield] Submitting image (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}`)
   const submitRes = await fetch(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, prompt: opts.prompt, aspect_ratio: opts.aspectRatio ?? '1:1', resolution: opts.resolution ?? '1k' }),
+    body: JSON.stringify(payload),
   })
 
   if (!submitRes.ok) {

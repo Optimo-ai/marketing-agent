@@ -208,6 +208,7 @@ export default function Home() {
   const [toast, setToast] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingText, setLoadingText] = useState('')
+  const [mounted, setMounted] = useState(false)
 
   // Data state
   const [briefing, setBriefing] = useState<BriefingData | null>(null)
@@ -321,6 +322,11 @@ export default function Home() {
       .then(r => r.json())
       .then(setIntStatus)
       .catch(() => {})
+  }, [])
+
+  // Evita errores de hidratación en Vercel esperando al cliente
+  useEffect(() => {
+    setMounted(true)
   }, [])
 
   useEffect(() => {
@@ -1859,6 +1865,8 @@ export default function Home() {
            s === dUnpadded;
   };
 
+  if (!mounted) return null;
+
   return (
     <>
       <Toast message={toast} />
@@ -2634,8 +2642,9 @@ export default function Home() {
                 )}
 
                 {/* BANDEJA DE CONFIRMACIÓN DE ORDEN */}
-                {fase3Step === 'confirm_assignment' && assignedPosts.length > 0 && (
-                  <div>
+                {fase3Step === 'confirm_assignment' && (
+                  assignedPosts.length > 0 ? (
+                    <div>
                     <div className="alert alert-teal" style={{marginBottom:16}}>
                       Claude ha asignado las imágenes. Revisa y confirma el orden de los carruseles antes de aplicar la marca de agua.
                     </div>
@@ -2708,12 +2717,21 @@ export default function Home() {
                     <button className="btn btn-primary" onClick={confirmAndRender} style={{width: '100%', padding: '14px', fontSize: 14, marginTop: 4}}>
                       ✓ Confirmar orden y Aplicar marca →
                     </button>
-                  </div>
+                    </div>
+                  ) : (
+                    <div style={{textAlign: 'center', padding: '40px 0', background: 'var(--surface2)', borderRadius: 'var(--r-sm)'}}>
+                      <div className="alert alert-amber" style={{marginBottom: 16}}>
+                        No se pudo asignar ninguna imagen. Verifica que haya posts en el calendario y sube imágenes.
+                      </div>
+                      <button className="btn btn-sm" onClick={() => setFase3Step('idle')}>← Volver a intentar</button>
+                    </div>
+                  )
                 )}
 
                 {/* BANDEJA DE REVISIÓN */}
-                {fase3Step === 'review' && renderedPosts.length > 0 && (
-                  <div>
+                {fase3Step === 'review' && (
+                  renderedPosts.length > 0 ? (
+                    <div>
                     {fase3Stats && (
                       <div className="alert alert-teal" style={{marginBottom:16}}>
                         ✓ <strong>{renderedPosts.length} posts</strong> listos —
@@ -2886,12 +2904,21 @@ export default function Home() {
                       style={{width:'100%',padding:'14px',fontSize:14,marginTop:4}}>
                       ✓ Aprobar todo y continuar a Fase 4 →
                     </button>
-                  </div>
+                    </div>
+                  ) : (
+                    <div style={{textAlign: 'center', padding: '40px 0', background: 'var(--surface2)', borderRadius: 'var(--r-sm)'}}>
+                      <div className="alert alert-amber" style={{marginBottom: 16}}>
+                        No se pudo renderizar ningún diseño. Revisa la consola o intenta nuevamente.
+                      </div>
+                      <button className="btn btn-sm" onClick={() => setFase3Step('idle')}>← Volver a intentar</button>
+                    </div>
+                  )
                 )}
 
                 {/* ── REVISIÓN IA: aprueba/rechaza/regenera cada imagen o video ── */}
-                {fase3Step === 'ai_review' && aiMediaItems.length > 0 && (
-                  <div>
+                {fase3Step === 'ai_review' && (
+                  aiMediaItems.length > 0 ? (
+                    <div>
                     <div className="alert alert-teal" style={{marginBottom:16}}>
                       <strong>{aiMediaItems.length} medios generados</strong> — aprueba o rechaza cada uno.
                       Los aprobados se subirán a GHL y pasarán a Fase 4.
@@ -3377,6 +3404,23 @@ export default function Home() {
                       </button>
                     </div>
                   </div>
+                  </div>
+                  ) : (
+                    <div style={{textAlign: 'center', padding: '40px 0', background: 'var(--surface2)', borderRadius: 'var(--r-sm)'}}>
+                      <div className="alert alert-amber" style={{marginBottom: 16}}>
+                        No se generaron diseños. Es posible que el servidor de Higgsfield haya tardado demasiado o todos los posts fallaron.
+                        {aiMediaErrors.length > 0 && (
+                          <div style={{marginTop: 12, textAlign: 'left'}}>
+                            <strong style={{color: 'var(--text)'}}>Errores detectados:</strong>
+                            {aiMediaErrors.map((e: any, i: number) => (
+                              <div key={i} style={{fontSize: 12, marginTop: 6, color: 'var(--red)'}}>✕ {e.postName}: {e.error}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button className="btn btn-sm" onClick={() => setFase3Step('idle')}>← Volver a intentar</button>
+                    </div>
+                  )
                 )}
               </div>
             )}

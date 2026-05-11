@@ -17,28 +17,36 @@ function getKey(): string {
   return key
 }
 
-async function fetchWithRetry(url: string, options: RequestInit, retries = 3): Promise<Response> {
-  const DELAYS = [5_000, 10_000, 20_000]
+// Timeouts de Cloudflare (522, 524) — no se resuelven con reintentos, fallar rápido
+const CLOUDFLARE_TIMEOUT_CODES = new Set([522, 524, 523, 530])
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  const DELAYS = [2_000, 4_000]
   for (let i = 0; i < retries; i++) {
     const controller = new AbortController()
-    const timeoutId  = setTimeout(() => controller.abort(), 30_000)
+    const timeoutId  = setTimeout(() => controller.abort(), 10_000)  // 10s por intento
     try {
       const res = await fetch(url, { ...options, signal: controller.signal })
       clearTimeout(timeoutId)
       if (res.ok) return res
+      if (CLOUDFLARE_TIMEOUT_CODES.has(res.status)) {
+        // 522/524: servidor Higgsfield inaccesible — no tiene sentido reintentar
+        console.warn(`[higgsfield] CDN timeout ${res.status} — fallo inmediato (sin reintentos)`)
+        return res
+      }
       if (res.status >= 500 && res.status <= 599) {
         console.warn(`[higgsfield] API HTTP ${res.status}, reintento ${i + 1}/${retries}...`)
         if (i === retries - 1) return res
-        await new Promise(r => setTimeout(r, DELAYS[i] ?? 20_000))
+        await new Promise(r => setTimeout(r, DELAYS[i] ?? 4_000))
       } else {
         return res
       }
     } catch (err: any) {
       clearTimeout(timeoutId)
       const isAbort = err?.name === 'AbortError'
-      console.warn(`[higgsfield] ${isAbort ? 'Request timeout (30s)' : 'Network error'}, reintento ${i + 1}/${retries}...`)
+      console.warn(`[higgsfield] ${isAbort ? 'Request timeout (10s)' : 'Network error'}, reintento ${i + 1}/${retries}...`)
       if (i === retries - 1) throw err
-      await new Promise(r => setTimeout(r, DELAYS[i] ?? 20_000))
+      await new Promise(r => setTimeout(r, DELAYS[i] ?? 4_000))
     }
   }
   throw new Error('Unreachable')

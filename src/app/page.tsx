@@ -1194,6 +1194,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          skipGHL: true,          // siempre data URL para stories — evita navegar fuera al descargar
           assignments: [{
             postId: `story-${Date.now()}`,
             postName: copy,
@@ -4487,10 +4488,32 @@ export default function Home() {
                                 setStoryRendered(null)
                                 setStorySelectedCopy(null)
                               }}>← Elegir otro copy</button>
-                              
-                              <a href={storyRendered} download={`Story_${storyProject}_${Date.now()}.jpg`} className="btn btn-success">
+
+                              <button className="btn btn-success" onClick={() => {
+                                if (!storyRendered) return
+                                // Descarga programática — nunca navega fuera de la plataforma
+                                const a = document.createElement('a')
+                                if (storyRendered.startsWith('data:')) {
+                                  a.href = storyRendered
+                                } else {
+                                  // URL externa → fetch y convertir a blob URL
+                                  fetch(storyRendered)
+                                    .then(r => r.blob())
+                                    .then(blob => {
+                                      const url = URL.createObjectURL(blob)
+                                      a.href = url
+                                      a.download = `Story_${storyProject}_${Date.now()}.jpg`
+                                      a.click()
+                                      setTimeout(() => URL.revokeObjectURL(url), 2000)
+                                    })
+                                    .catch(() => window.open(storyRendered, '_blank'))
+                                  return
+                                }
+                                a.download = `Story_${storyProject}_${Date.now()}.jpg`
+                                a.click()
+                              }}>
                                 📥 Descargar
-                              </a>
+                              </button>
                             </div>
                           </div>
                         </div>

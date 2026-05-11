@@ -107,9 +107,10 @@ function mapFormat(postFormat: string): string {
 
 export async function POST(req: NextRequest) {
   try {
-    const { assignments, logoBase64 } = await req.json() as {
+    const { assignments, logoBase64, skipGHL } = await req.json() as {
       assignments: AssignedPost[]
       logoBase64?: string
+      skipGHL?: boolean      // si true, devuelve data URL en lugar de subir a GHL
     }
 
     if (!assignments?.length) {
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
               })
 
               const filename = `${brand}_${String(post.postId)}_slide${slideIdx + 1}_${Date.now()}.jpg`
-              const ghlUrl = await tryUploadToGHL(rendered.buffer, filename, rendered.mimeType)
+              const ghlUrl = skipGHL ? null : await tryUploadToGHL(rendered.buffer, filename, rendered.mimeType)
               const finalUrl = ghlUrl ?? bufToDataUrl(rendered.buffer, rendered.mimeType)
 
               slideUrls.push(finalUrl)
@@ -201,7 +202,7 @@ export async function POST(req: NextRequest) {
             })
 
             const filename = `${brand}_${String(post.postId)}_${renderFormat}_${Date.now()}.jpg`
-            const ghlUrl = await tryUploadToGHL(rendered.buffer, filename, rendered.mimeType)
+            const ghlUrl = skipGHL ? null : await tryUploadToGHL(rendered.buffer, filename, rendered.mimeType)
             const finalUrl = ghlUrl ?? bufToDataUrl(rendered.buffer, rendered.mimeType)
 
             if (!post.needsAI && post.image) {

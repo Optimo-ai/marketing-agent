@@ -93,18 +93,18 @@ function mapAspectRatio(w: number, h: number): {
   return                   { aspectRatio: '1:1',  width: 1024, height: 1024 }
 }
 
-// Genera imagen — usando higgsfield
+// Genera imagen — intenta Higgsfield, NUNCA lanza error: devuelve buffer=undefined si falla
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
   referenceImage?: string
-): Promise<{ buffer: Buffer; jobId?: string }> {
+): Promise<{ buffer: Buffer | undefined; jobId?: string }> {
   try {
     const { buffer, jobId } = await generateImageTracked({ prompt, aspectRatio, referenceImage })
     return { buffer, jobId }
   } catch (err: any) {
-    const msg = String(err?.message ?? err)
-    throw err
+    console.warn(`[generate-media] Higgsfield no disponible → canvas fallback. ${String(err?.message ?? err).slice(0, 100)}`)
+    return { buffer: undefined, jobId: undefined }
   }
 }
 
@@ -189,21 +189,18 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
               isRealVideo = false
             }
 
-            // Si video falló, generar thumbnail estático con Higgsfield; si también falla, usar canvas
+            // Si video falló, generar thumbnail — Higgsfield o canvas (generateAnyImage nunca lanza)
             if (!videoBuffer) {
-              console.warn(`[generate-media] Generando thumbnail para "${postName}"`)
-              try {
-                const imgResult = await generateAnyImage(
-                  config.aiPromptBase + ', ' + contentDir.slice(0, 50) + ', cinematic still frame, no people, luxury real estate',
-                  videoAspect,
-                  refImage
-                )
+              const imgResult = await generateAnyImage(
+                config.aiPromptBase + ', ' + contentDir.slice(0, 50) + ', cinematic still frame, no people, luxury real estate',
+                videoAspect,
+                refImage
+              )
+              // imgResult.buffer es undefined si Higgsfield falló → canvas fallback
+              if (imgResult.buffer) {
                 videoBuffer     = imgResult.buffer
                 higgsfieldJobId = imgResult.jobId
-                isRealVideo     = false
-              } catch (imgErr) {
-                console.warn(`[generate-media] Higgsfield thumbnail falló para "${postName}" — usando canvas fallback`)
-                // Fallback: canvas con plantilla de marca (fondo negro + texto)
+              } else {
                 const canvasFallback = await renderImage({
                   brand,
                   format:      renderFormat,
@@ -213,8 +210,8 @@ Video style: ${videoStyle === 'avatar' ? 'lifestyle' : videoStyle}`
                   outputFormat: 'jpg',
                 })
                 videoBuffer = canvasFallback.buffer
-                isRealVideo = false
               }
+              isRealVideo = false
             }
 
             // Step post: procesar video o usar thumbnail estático
@@ -314,13 +311,14 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
               slide4_body: 'Visit our website.'
             })
 
-            // Step 3: Fal AI genera las imágenes de foto
+            // Step 3: Higgsfield genera las imágenes — con fallback canvas por slide si el servidor no responde
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
+            // generateAnyImage nunca lanza — buffer=undefined significa canvas fallback por slide
             const photoResults = await Promise.all(
               photoPrompts.map(p => generateAnyImage(p, aspectRatio, refImage))
             )
-            const photoBuffers = photoResults.map(r => r.buffer)
-            const carouselJobIds = photoResults.map(r => r.jobId).filter(Boolean) as string[]
+            const photoBuffers = photoResults.map(r => r.buffer)   // Buffer | undefined por slide
+            const carouselJobIds = photoResults.flatMap(r => r.jobId ? [r.jobId] : [])
 
             // Step 4: Renderizar los 4 slides con el texto generado
             const slideTexts = [
@@ -387,17 +385,10 @@ Media type needed: image`
 
             // Step 2: Higgsfield genera la imagen — con fallback canvas si el servidor no responde
             const { aspectRatio } = mapAspectRatio(fmt.w, fmt.h)
-            let imgBuffer: Buffer | undefined
-            let higgsfieldJobId: string | undefined
-
-            try {
-              const imgResult = await generateAnyImage(cleanPrompt, aspectRatio, refImage)
-              imgBuffer       = imgResult.buffer
-              higgsfieldJobId = imgResult.jobId
-            } catch (higgsErr) {
-              console.warn(`[generate-media] Higgsfield no disponible para "${postName}" — usando plantilla canvas como fallback. Error: ${String(higgsErr).slice(0,120)}`)
-              // imgBuffer queda undefined → renderImage usará fondo negro de marca
-            }
+            // generateAnyImage nunca lanza — si Higgsfield falla devuelve buffer=undefined
+            const imgResult     = await generateAnyImage(cleanPrompt, aspectRatio, refImage)
+            const imgBuffer     = imgResult.buffer   // undefined = canvas fallback
+            const higgsfieldJobId = imgResult.jobId
 
             // Step 3: Brand overlay (con o sin foto de Higgsfield)
             const rendered = await renderImage({

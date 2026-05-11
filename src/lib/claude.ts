@@ -29,12 +29,12 @@ Each variation: {id:number, hook:string, headline:string, body:string, cta:strin
 Generate 3 ad variations. Hook: 8 words max. Headline: 10 words max. Body: 25 words max.
 Return: JSON array of 3 objects only.`,
 
-  imagePrompt: `Generate ONE image prompt for luxury real estate. Cinematic, architectural, NO PEOPLE. Respond with ONLY the prompt string. Nothing else.`,
+  imagePrompt: `Generate ONE image prompt for luxury real estate. Cinematic, architectural, NO PEOPLE. CRITICAL: Focus on the building architecture, interiors, or amenities — NO ocean, NO beach, NO sea, NO coastline, NO water views unless explicitly requested. Respond with ONLY the prompt string. Nothing else.`,
 
   videoPrompt: `Generate ONE 15-second video prompt. Avatar Sofia OR cinematic/lifestyle/creative style. NO text overlays. Respond with ONLY the prompt string. Nothing else.`,
 
   carouselPrompts: `RESPOND WITH ONLY JSON ARRAY OF STRINGS. NOTHING ELSE. NO TEXT BEFORE OR AFTER.
-Generate N distinct image prompts for carousel slides. Each prompt: architectural, cinematic, NO PEOPLE.
+Generate N distinct image prompts for carousel slides. Each prompt: architectural, cinematic, NO PEOPLE. CRITICAL: Focus on the building, facades, interiors, amenities — NO ocean, NO beach, NO sea unless explicitly requested.
 Return: JSON array of strings only. Example: ["prompt 1", "prompt 2"]`,
 
   carouselText: `RESPOND WITH ONLY JSON. NOTHING ELSE. NO TEXT BEFORE OR AFTER.

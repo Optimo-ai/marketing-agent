@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import sharp from 'sharp'
 import Anthropic from '@anthropic-ai/sdk'
 
 export const maxDuration = 300;
@@ -44,26 +45,31 @@ function detectVideoStyle(contentDir: string, week: number): VideoStyle {
 }
 
 // ─── IMÁGENES DE REFERENCIA FIJAS ─────────────────────────────────────────────
-function getFixedReferenceImage(project: string): string | undefined {
+// Redimensiona a max 1024px y calidad 80 antes de base64 — Claude Vision rechaza >5MB
+async function getFixedReferenceImage(project: string): Promise<string | undefined> {
   const brand = (project || '').toLowerCase()
   let normalized = ''
   if (brand.includes('kasa')) normalized = 'kasa'
   else if (brand.includes('arko')) normalized = 'arko'
   else if (brand.includes('aria')) normalized = 'aria'
 
-  if (!normalized) return undefined // Si no es un proyecto específico (ej. Noriega Group), no usamos referencia fija
+  if (!normalized) return undefined
 
-  // Elegir aleatoriamente entre la opción 1 y 2
   const rand = Math.random() < 0.5 ? 1 : 2
   const fileName = `${normalized}-${rand}.jpg`
   const filePath = path.join(process.cwd(), 'public', 'references', fileName)
 
   try {
-    if (fs.existsSync(filePath)) {
-      return `data:image/jpeg;base64,${fs.readFileSync(filePath).toString('base64')}`
-    }
-  } catch (err) {}
-  return undefined
+    if (!fs.existsSync(filePath)) return undefined
+    const compressed = await sharp(fs.readFileSync(filePath))
+      .resize(1024, 1024, { fit: 'inside' })
+      .jpeg({ quality: 80 })
+      .toBuffer()
+    return `data:image/jpeg;base64,${compressed.toString('base64')}`
+  } catch (err) {
+    console.warn('[generate-media] getFixedReferenceImage error:', String(err).slice(0, 80))
+    return undefined
+  }
 }
 
 // ─── HELPERS DE FORMATO ───────────────────────────────────────────────────────
@@ -231,7 +237,7 @@ export async function POST(req: NextRequest) {
           const postId       = post.id ?? post.postId
           const postName     = post.name ?? post.postName ?? ''
           const contentDir   = post.contentDirection ?? postName
-          const refImage     = getFixedReferenceImage(post.project ?? '')
+          const refImage     = await getFixedReferenceImage(post.project ?? '')
 
           // ── REEL / VIDEO ────────────────────────────────────────────────────
           if (isVideo) {
@@ -381,7 +387,8 @@ Brand visual DNA: ${config.aiPromptBase}
 Project: ${post.project ?? ''}
 Format: portrait 1080x1350px
 Content direction: ${contentDir}
-Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
+Number of slides: ${CAROUSEL_PHOTO_SLIDES}
+IMPORTANT: Show building architecture, interiors, or amenities. NO ocean, NO beach, NO sea.`
               const rawSlidePrompts = await runSkill('carouselPrompts', claudeInput)
               try {
                 photoPrompts = parseJSON<string[]>(rawSlidePrompts)
@@ -419,11 +426,12 @@ Number of slides: ${CAROUSEL_PHOTO_SLIDES}`
             const carouselJobIds = photoResults.flatMap(r => r.jobId ? [r.jobId] : [])
 
             // Step 4: Renderizar los 4 slides con el texto generado
+            // Slides negros usan title (64px) no body (30px) para que el texto se vea grande
             const slideTexts = [
               { title: slideCopy.slide1_title, body: '' },
-              { title: '',                     body: slideCopy.slide2_body },
+              { title: slideCopy.slide2_body,  body: '' },
               { title: slideCopy.slide3_title, body: '' },
-              { title: '',                     body: slideCopy.slide4_body },
+              { title: slideCopy.slide4_body,  body: '' },
             ]
 
             let photoIdx = 0
@@ -487,7 +495,8 @@ Brand visual DNA: ${config.aiPromptBase}
 Project: ${post.project ?? ''}
 Format: ${postFormat || 'post'} (${fmt.w}x${fmt.h}px)
 Content direction: ${contentDir}
-Media type needed: image`
+Media type needed: image
+IMPORTANT: Show building architecture, interiors, or amenities. NO ocean, NO beach, NO sea.`
               const rawPrompt = await runSkill('imagePrompt', claudeInput)
               cleanPrompt = rawPrompt.trim().replace(/^["']|["']$/g, '')
             }

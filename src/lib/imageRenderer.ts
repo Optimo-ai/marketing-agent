@@ -74,10 +74,6 @@ const GRAD_BOT = 0.42
 const LOGO_W = 218
 const LOGO_Y = 100
 
-// Divisores: 1px, ±42px del centro horizontal, opacidad ~43% (110/255)
-const DIV_HALF = 42
-const DIV_OPACITY = Math.round(110 / 255 * 255)  // 110
-
 // Zona de texto: 45–65% del canvas (y 607–877)
 const TEXT_ZONE_TOP    = Math.round(H * 0.45)   // 607
 const TEXT_ZONE_BOTTOM = Math.round(H * 0.75)   // 1012
@@ -158,19 +154,6 @@ function wrapCentered(ctx: any, text: string, y: number, fontSize: number, canva
   return lines.length * (fontSize + 10)
 }
 
-// ─── HELPER: DIVISOR ──────────────────────────────────────────────────────────
-
-function drawDivider(ctx: any, y: number, canvasW: number) {
-  ctx.globalAlpha = DIV_OPACITY / 255
-  ctx.strokeStyle = WHITE
-  ctx.lineWidth = 1
-  const cx = canvasW / 2
-  ctx.beginPath()
-  ctx.moveTo(cx - DIV_HALF, y)
-  ctx.lineTo(cx + DIV_HALF, y)
-  ctx.stroke()
-  ctx.globalAlpha = 1
-}
 
 // ─── HELPER: LOGO ─────────────────────────────────────────────────────────────
 
@@ -273,10 +256,6 @@ export async function renderImage(input: RenderInput): Promise<RenderOutput> {
 
     anchorY = Math.max(TEXT_ZONE_TOP, Math.min(TEXT_CENTER_Y, TEXT_ZONE_BOTTOM - totalH))
 
-    // Divisor superior
-    drawDivider(ctx, anchorY, w)
-    anchorY += 18
-
     // Título
     if (input.title) {
       const titleSize = input.title.length > 30 ? SIZE_HEADLINE - 8 : SIZE_HEADLINE
@@ -289,9 +268,6 @@ export async function renderImage(input: RenderInput): Promise<RenderOutput> {
       anchorY += 10
       anchorY += wrapCentered(ctx, input.body, anchorY, SIZE_BODY, w, maxTextW)
     }
-
-    // Divisor inferior
-    drawDivider(ctx, anchorY, w)
 
     // Sitio web (último slide)
     if (showWebsite) {

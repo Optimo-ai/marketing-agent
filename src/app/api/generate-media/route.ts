@@ -117,31 +117,32 @@ function mapAspectRatio(w: number, h: number): {
 async function generateAnyImage(
   prompt: string,
   aspectRatio: '16:9'|'9:16'|'1:1',
-  refImageB64?: string,   // base64 data URL — usado como fondo si Higgsfield falla
-  refImageUrl?: string    // URL pública HTTP — pasada a Higgsfield para image-to-image real
+  refImageB64?: string,   // base64 → decodificado y subido a Higgsfield para image-to-image
+  refImageUrl?: string    // URL pública → fallback si el upload falla
 ): Promise<{ buffer: Buffer | undefined; jobId?: string }> {
-  // ── 1. Higgsfield (con image-to-image si hay URL pública) ────────────────────
+  // Decodificar base64 → buffer para subir a Higgsfield
+  let refBuffer: Buffer | undefined
+  if (refImageB64) {
+    try { const [, b64] = refImageB64.split(','); refBuffer = Buffer.from(b64, 'base64') } catch {}
+  }
+
+  // ── 1. Higgsfield image-to-image — sube referencia → genera variante ─────────
   try {
     const { buffer, jobId } = await generateImageTracked({
       prompt,
       aspectRatio,
-      referenceImageUrl: refImageUrl,   // HTTP URL → medias image-to-image
+      referenceImageBuffer: refBuffer,   // upload directo a Higgsfield media storage
+      referenceImageUrl:    refImageUrl, // fallback URL si upload falla
     })
     return { buffer, jobId }
   } catch (err: any) {
-    console.warn(`[generate-media] Higgsfield no disponible (${String(err?.message ?? err).slice(0, 80)}) — buscando foto alternativa`)
+    console.warn(`[generate-media] Higgsfield no disponible (${String(err?.message ?? err).slice(0, 80)}) — usando fallback`)
   }
 
-  // ── 2. Imagen de referencia base64 como fondo ────────────────────────────────
-  if (refImageB64) {
-    try {
-      const [, b64] = refImageB64.split(',')
-      const buf = Buffer.from(b64, 'base64')
-      if (buf.length > 5000) {
-        console.log('[generate-media] Usando imagen de referencia de marca como foto de fondo')
-        return { buffer: buf }
-      }
-    } catch {}
+  // ── 2. Imagen de referencia como fondo (solo si Higgsfield falla totalmente) ─
+  if (refBuffer && refBuffer.length > 5000) {
+    console.log('[generate-media] Higgsfield falló — usando referencia como fondo')
+    return { buffer: refBuffer }
   }
 
   // ── 3. Picsum Photos — fotos pro de arquitectura, gratis, sin API key ────────

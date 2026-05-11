@@ -78,7 +78,8 @@ export interface HiggsfieldImageOptions {
   aspectRatio?: '1:1' | '4:3' | '3:4' | '16:9' | '9:16'  // default 1:1
   resolution?:  '1k' | '2k' | '4k'                         // default 1k
   model?:       string                                       // default nano_banana_flash
-  referenceImageUrl?: string                                 // URL pública HTTP → medias image-to-image
+  referenceImageUrl?:    string   // URL pública HTTP (fallback si no hay buffer)
+  referenceImageBuffer?: Buffer   // Buffer → se sube a Higgsfield media storage (preferido)
 }
 
 // ─── GENERACIÓN DE VIDEO ──────────────────────────────────────────────────────
@@ -117,22 +118,72 @@ export async function generateVideo(opts: HiggsfieldVideoOptions): Promise<Buffe
   return pollJob(jobId, key, 300_000)
 }
 
+// ─── MEDIA UPLOAD ─────────────────────────────────────────────────────────────
+// Sube buffer a Higgsfield media storage → devuelve media_id para image-to-image
+async function uploadReferenceBuffer(buffer: Buffer, key: string): Promise<string | undefined> {
+  try {
+    const uploadRes = await fetch(`${BASE_URL}/medias/upload-url`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'reference.jpg', content_type: 'image/jpeg' }),
+    })
+    if (!uploadRes.ok) {
+      console.warn(`[higgsfield] media upload-url ${uploadRes.status}:`, (await uploadRes.text()).slice(0, 150))
+      return undefined
+    }
+    const uploadData = await uploadRes.json()
+    const item = Array.isArray(uploadData) ? uploadData[0] : (uploadData.data ?? uploadData)
+    const mediaId: string   = item.media_id ?? item.id
+    const uploadUrl: string = item.upload_url ?? item.url
+    if (!mediaId || !uploadUrl) {
+      console.warn('[higgsfield] upload-url formato inesperado:', JSON.stringify(uploadData).slice(0, 200))
+      return undefined
+    }
+    const putRes = await fetch(uploadUrl, {
+      method: 'PUT', body: new Uint8Array(buffer),
+      headers: { 'Content-Type': 'image/jpeg' },
+    })
+    if (!putRes.ok) { console.warn(`[higgsfield] media PUT ${putRes.status}`); return undefined }
+    const confirmRes = await fetch(`${BASE_URL}/medias/confirm`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media_id: mediaId, type: 'image' }),
+    })
+    if (!confirmRes.ok) { console.warn(`[higgsfield] media confirm ${confirmRes.status}`); return undefined }
+    console.log(`[higgsfield] Reference uploaded → media_id: ${mediaId}`)
+    return mediaId
+  } catch (err) {
+    console.warn('[higgsfield] uploadReferenceBuffer error:', String(err).slice(0, 100))
+    return undefined
+  }
+}
+
+// Buffer primero → upload; si falla intenta URL pública
+async function resolveReferenceMedia(opts: HiggsfieldImageOptions, key: string): Promise<string | undefined> {
+  if (opts.referenceImageBuffer) {
+    const mediaId = await uploadReferenceBuffer(opts.referenceImageBuffer, key)
+    if (mediaId) return mediaId
+  }
+  return opts.referenceImageUrl
+}
+
 // ─── GENERACIÓN DE IMAGEN ─────────────────────────────────────────────────────
 export async function generateImage(opts: HiggsfieldImageOptions): Promise<Buffer> {
   const key   = getKey()
   const model = opts.model ?? 'nano_banana_flash'
 
+  const refValue = await resolveReferenceMedia(opts, key)
   const payload: any = {
     model,
     prompt: opts.prompt,
     aspect_ratio: opts.aspectRatio ?? '1:1',
     resolution: opts.resolution ?? '1k'
   }
-  if (opts.referenceImageUrl) {
-    payload.medias = [{ value: opts.referenceImageUrl, role: 'image' }]
+  if (refValue) {
+    payload.medias = [{ value: refValue, role: 'image' }]
   }
 
-  console.log(`[higgsfield] Submitting image — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}${opts.referenceImageUrl ? ' (image-to-image)' : ''}`)
+  console.log(`[higgsfield] Submitting image — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}${refValue ? ' (image-to-image)' : ''}`)
   const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
@@ -233,17 +284,18 @@ export async function generateImageTracked(opts: HiggsfieldImageOptions): Promis
   const key   = getKey()
   const model = opts.model ?? 'nano_banana_flash'
 
+  const refValue = await resolveReferenceMedia(opts, key)
   const payload: any = {
     model,
     prompt: opts.prompt,
     aspect_ratio: opts.aspectRatio ?? '1:1',
     resolution: opts.resolution ?? '1k'
   }
-  if (opts.referenceImageUrl) {
-    payload.medias = [{ value: opts.referenceImageUrl, role: 'image' }]
+  if (refValue) {
+    payload.medias = [{ value: refValue, role: 'image' }]
   }
 
-  console.log(`[higgsfield] Submitting image (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}${opts.referenceImageUrl ? ' (image-to-image)' : ''}`)
+  console.log(`[higgsfield] Submitting image (tracked) — model: ${model}, aspect: ${opts.aspectRatio ?? '1:1'}${refValue ? ' (image-to-image)' : ''}`)
   const submitRes = await fetchWithRetry(`${BASE_URL}/generations`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
